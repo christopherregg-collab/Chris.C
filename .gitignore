@@ -1,0 +1,4 @@
+# Local config and secrets — never commit API keys
+config.js
+.env
+.env.*

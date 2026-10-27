@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crypto Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Crypto Dashboard</h1>
+    <div class="controls">
+      <label>Symbol
+        <select id="symbol"></select>
+      </label>
+      <label>Theme
+        <select id="theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <div id="ticker-tape" class="panel panel--tape"></div>
+
+  <main class="grid">
+    <section class="panel panel--chart" id="chart"></section>
+    <section class="panel" id="technicals"></section>
+    <section class="panel" id="symbol-info"></section>
+    <section class="panel panel--wide" id="screener"></section>
+    <section class="panel" id="heatmap"></section>
+    <section class="panel" id="news"></section>
+  </main>
+
+  <footer class="foot">
+    Charts and market data by <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView</a>.
+  </footer>
+
+  <!-- Optional local overrides (gitignored). See config.example.js. -->
+  <script src="config.js" onerror="void 0"></script>
+  <script src="app.js"></script>
+</body>
+</html>
