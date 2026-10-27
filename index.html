@@ -28,6 +28,29 @@
     <section class="panel panel--chart" id="chart"></section>
     <section class="panel" id="technicals"></section>
     <section class="panel" id="symbol-info"></section>
+    <section class="panel panel--wide panel--signals" id="signals">
+      <div class="signals-head">
+        <h2>Signals</h2>
+        <label>Timeframe
+          <select id="signals-interval">
+            <option value="15m">15m</option>
+            <option value="1h" selected>1h</option>
+            <option value="6h">6h</option>
+            <option value="1d">1d</option>
+          </select>
+        </label>
+        <span class="signals-status" id="signals-status"></span>
+      </div>
+      <div class="signals-scroll">
+        <table class="signals-table">
+          <thead>
+            <tr><th>Coin</th><th>Price</th><th>Change</th><th>RSI 14</th><th>MACD</th><th>EMA 20/50</th><th>Signal</th></tr>
+          </thead>
+          <tbody id="signals-body"></tbody>
+        </table>
+      </div>
+      <p class="signals-note">Signals combine EMA trend, MACD momentum and RSI on Coinbase USD candles. Change is over the loaded window. Not financial advice.</p>
+    </section>
     <section class="panel panel--wide" id="screener"></section>
     <section class="panel" id="heatmap"></section>
     <section class="panel" id="news"></section>
@@ -40,5 +63,6 @@
   <!-- Optional local overrides (gitignored). See config.example.js. -->
   <script src="config.js" onerror="void 0"></script>
   <script src="app.js"></script>
+  <script type="module" src="signals.js"></script>
 </body>
 </html>

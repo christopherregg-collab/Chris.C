@@ -137,17 +137,24 @@
   themeSelect.value = state.theme;
   document.body.classList.toggle("light", state.theme === "light");
 
-  symbolSelect.addEventListener("change", () => {
-    state.symbol = symbolSelect.value;
-    localSet("symbol", state.symbol);
+  function selectSymbol(symbol) {
+    state.symbol = symbol;
+    symbolSelect.value = symbol;
+    localSet("symbol", symbol);
     render();
-  });
+    document.dispatchEvent(new CustomEvent("dashboard:symbol", { detail: symbol }));
+  }
+
+  symbolSelect.addEventListener("change", () => selectSymbol(symbolSelect.value));
   themeSelect.addEventListener("change", () => {
     state.theme = themeSelect.value;
     localSet("theme", state.theme);
     document.body.classList.toggle("light", state.theme === "light");
     render();
   });
+
+  // Shared with signals.js.
+  window.DASHBOARD = { config, label, selectSymbol, getSymbol: () => state.symbol };
 
   render();
 })();
