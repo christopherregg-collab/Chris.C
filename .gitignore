@@ -1,4 +1,10 @@
 # Local config and secrets — never commit API keys
+public/config.js
 config.js
 .env
 .env.*
+!.env.example
+
+node_modules/
+dist/
+.vercel/

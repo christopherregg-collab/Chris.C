@@ -1,4 +1,4 @@
-import { evaluate } from "./lib/indicators.js";
+import { evaluate } from "../../lib/indicators.js";
 
 const REFRESH_MS = 60_000;
 const { config, label, selectSymbol, getSymbol } = window.DASHBOARD;

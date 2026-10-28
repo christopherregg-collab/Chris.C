@@ -92,3 +92,5 @@ body.light { --up: #089981; --down: #e03a3e; }
 .flat { color: var(--flat); }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; }
 .signals-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.topbar h1 .back { color: var(--muted); font-size: 13px; font-weight: 500; text-decoration: none; margin-right: 8px; }
+.topbar h1 .back:hover { color: var(--text); }

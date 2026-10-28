@@ -14,9 +14,10 @@ These change the design, so settle them before Phase 3:
 1. **Just for you, or for other people too?** Running other people's money, or charging for
    signals, brings in licensing, KYC and liability questions. A personal tool avoids nearly all
    of that. This plan assumes a personal tool.
-2. **Which exchange?** From the US, Coinbase Advanced Trade and Kraken are the realistic options.
-   Binance.com blocks US users and US servers, Vercel's included. The signals already use Coinbase
-   data, so Coinbase is the default.
+2. **Which exchange?** BloFin is the chosen exchange for the bot. Its API is authenticated with a key,
+   a secret and a passphrase, which must live only in server-side environment variables. Check
+   BloFin's terms for your country before trading. Binance.com blocks US users and US servers,
+   Vercel's included. The markets page's signals use Coinbase public data, which needs no key.
 3. **How much automation?** The options are alerts only, one-click orders you confirm, or a fully
    automatic bot. Each step up needs more safeguards (Phase 5).
 4. **Hosting budget.** Vercel's Hobby plan is for non-commercial use, and its cron jobs can run
@@ -25,9 +26,22 @@ These change the design, so settle them before Phase 3:
 
 ## Phase 0: Dashboard and signals (done)
 
-- TradingView widgets: chart, technicals, screener, heatmap, news.
-- Signals table: EMA trend + MACD + RSI scoring on Coinbase candles, via `api/candles.js`.
-- Unit tests for the indicators and the API.
+- Bot dashboard (React + TypeScript): performance, four strategy slots, trades, scanner and risk
+  cards, with demo data behind a data adapter (`src/data/adapter.ts`).
+- Markets page: TradingView widgets and an EMA + MACD + RSI signals table on Coinbase candles.
+- Tests for the indicators, the API and the dashboard calculations.
+
+## Next: connect BloFin (read-only)
+
+Goal: replace the demo data with the real account, without any ability to trade yet.
+
+- Create a BloFin API key with **read-only** permission.
+- Add `api/dashboard.js`, which calls BloFin's REST API server-side with the key, secret and
+  passphrase from Vercel environment variables. It maps balances, positions and fills into
+  `DashboardData` and returns it.
+- An equity history needs storing over time, because exchanges report current balances. Record
+  snapshots on a schedule (see Phase 2), or start with a short history built from fills.
+- Set `VITE_DATA_SOURCE=api`. Cards, layout and calculations stay as they are.
 
 ## Phase 1: Make the signals trustworthy
 
@@ -35,7 +49,7 @@ Goal: know whether the signals would actually have made money before acting on t
 
 - **Backtester.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
-  just holding. Include fees (about 0.4–0.6% a trade on Coinbase) and slippage.
+  just holding. Include exchange fees and slippage.
 - **Tune the scoring.** Today RSI works against the trend, which makes Strong buy and Strong sell
   rare. Try alternatives in the backtester: trend-filtered RSI, an ATR volatility filter, volume
   confirmation, and a dead band so a MACD near zero doesn't flip back and forth.
@@ -60,8 +74,6 @@ Goal: get told about a signal instead of watching the page.
 
 Goal: turn the page into an app with saved state.
 
-- Move to a framework once the page outgrows plain scripts. Next.js is the natural fit on Vercel,
-  and the existing `lib/` and `api/` code carries over largely unchanged.
 - Sign-in (Auth.js, Clerk or Supabase Auth), even for one user, because later phases hold
   exchange keys.
 - Saved watchlists, alert rules and strategy settings per user.
@@ -79,8 +91,8 @@ Goal: run the strategy on live prices with fake money.
 
 Goal: real orders, with the blast radius capped.
 
-- **Exchange connection.** Coinbase Advanced Trade API, with keys entered once, encrypted at rest
-  and used only on the server. Never send a key to the browser.
+- **Exchange connection.** BloFin's trading API, with keys entered once, encrypted at rest and used
+  only on the server. Never send a key to the browser.
 - **Key permissions.** Create keys with view and trade rights only, never transfer or withdraw.
   Restrict them to your server's IP address where the exchange allows it. Vercel functions don't
   have a fixed IP, which is one more reason to place orders from a worker.

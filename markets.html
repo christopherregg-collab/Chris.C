@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Markets · My Trading Bot</title>
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="/" class="back">← Bot dashboard</a> Markets</h1>
+    <div class="controls">
+      <label>Symbol
+        <select id="symbol"></select>
+      </label>
+      <label>Theme
+        <select id="theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <div id="ticker-tape" class="panel panel--tape"></div>
+
+  <main class="grid">
+    <section class="panel panel--chart" id="chart"></section>
+    <section class="panel" id="technicals"></section>
+    <section class="panel" id="symbol-info"></section>
+    <section class="panel panel--wide panel--signals" id="signals">
+      <div class="signals-head">
+        <h2>Signals</h2>
+        <label>Timeframe
+          <select id="signals-interval">
+            <option value="15m">15m</option>
+            <option value="1h" selected>1h</option>
+            <option value="6h">6h</option>
+            <option value="1d">1d</option>
+          </select>
+        </label>
+        <span class="signals-status" id="signals-status"></span>
+      </div>
+      <div class="signals-scroll">
+        <table class="signals-table">
+          <thead>
+            <tr><th>Coin</th><th>Price</th><th>Change</th><th>RSI 14</th><th>MACD</th><th>EMA 20/50</th><th>Signal</th></tr>
+          </thead>
+          <tbody id="signals-body"></tbody>
+        </table>
+      </div>
+      <p class="signals-note">Signals combine EMA trend, MACD momentum and RSI on Coinbase USD candles. Change is over the loaded window. Not financial advice.</p>
+    </section>
+    <section class="panel panel--wide" id="screener"></section>
+    <section class="panel" id="heatmap"></section>
+    <section class="panel" id="news"></section>
+  </main>
+
+  <footer class="foot">
+    Charts and market data by <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView</a>.
+  </footer>
+
+  <!-- Optional overrides: copy public/config.example.js to public/config.js (gitignored). -->
+  <script src="/config.js" onerror="void 0"></script>
+  <script type="module" src="/src/markets/main.js"></script>
+</body>
+</html>
