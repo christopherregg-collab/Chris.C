@@ -6,7 +6,7 @@ scanner and risk. It runs on **demo data** until a live bot or exchange integrat
 - `/`: the bot dashboard (React + TypeScript).
 - `/markets.html`: the earlier markets page, with TradingView charts and the indicator signals table.
 
-See [ROADMAP.md](ROADMAP.md) for where this is heading.
+See [ROADMAP.md](ROADMAP.md) for where this is heading, and [HANDOVER.md](HANDOVER.md) to pick the project up on your own computer.
 
 ## Run it
 
