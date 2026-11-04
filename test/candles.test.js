@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import handler, { parseCoinbase, fetchCandles } from "../api/candles.js";
+import handler, { parseCoinbase, fetchCandles, splitClosed } from "../api/candles.js";
 
 test("parseCoinbase maps rows and sorts oldest first", () => {
   const rows = [
@@ -54,5 +54,16 @@ test("handler returns candles with a CDN cache header", async (t) => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.base, "ETH");
   assert.equal(res.body.candles.length, 1);
+  assert.equal(res.body.current, null, "a candle from 1970 is long finished");
   assert.match(res.headers["Cache-Control"], /s-maxage=60/);
+});
+
+test("splitClosed separates the in-progress candle", () => {
+  const c = (time) => ({ time, open: 1, high: 1, low: 1, close: 1, volume: 1 });
+  const candles = [c(0), c(3600), c(7200)];
+  // At 7300s the 7200 candle (covering 7200–10800) is still forming.
+  assert.deepEqual(splitClosed(candles, 3600, 7300), { closed: [c(0), c(3600)], current: c(7200) });
+  // At exactly 10800s it has finished.
+  assert.deepEqual(splitClosed(candles, 3600, 10800), { closed: candles, current: null });
+  assert.deepEqual(splitClosed([], 3600, 0), { closed: [], current: null });
 });

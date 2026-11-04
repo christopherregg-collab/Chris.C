@@ -2,24 +2,32 @@
 // BloFin with a read-only API key held in server environment variables.
 //
 // There is no trading bot yet, so: open positions are shown in the Strategy 1
-// slot, the scanner is empty, and "health" means "the BloFin API answered".
+// slot, the scanner is the markets-page signals run on the server
+// (server/scanner.js), and "health" means "the BloFin API answered".
 
 import { createClient, credentialsFromEnv, fetchAccount, fetchCashFlowSince, fetchClosedTrades, fetchPositions } from "../server/blofin.js";
 import { readSnapshots } from "../server/snapshots.js";
+import { getScanner } from "../server/scanner.js";
 
 const DAY = 86_400_000;
+/** Snapshots are hourly; older than this means the recorder has stopped. */
+export const SNAPSHOT_MAX_AGE_MS = 70 * 60_000;
 const CACHE_MS = 10_000;
 let cache = { at: 0, body: null };
 
-export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [], dailyLossCap } = {}) {
+export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [], dailyLossCap, scanner = getScanner } = {}) {
   const asOf = new Date(nowMs).toISOString();
   const last = snapshots[snapshots.length - 1];
-  const [account, positions, closed, flow] = await Promise.all([
+  const [account, positions, closed, flow, scan] = await Promise.all([
     fetchAccount(client),
     fetchPositions(client, nowMs),
     fetchClosedTrades(client, nowMs - 8 * DAY, nowMs),
     last ? fetchCashFlowSince(client, Date.parse(last.t)) : Promise.resolve(0),
+    scanner(nowMs),
   ]);
+  // The chart's history comes from hourly snapshots. If the newest is overdue,
+  // report its time as asOf so the Performance card shows a stale badge.
+  const snapshotsOverdue = last && nowMs - Date.parse(last.t) > SNAPSHOT_MAX_AGE_MS;
 
   const unrealized = positions.reduce((s, p) => s + p.unrealizedPnl, 0);
   // Live point appended after the stored hourly snapshots so "Today" is current.
@@ -33,7 +41,7 @@ export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [
     health: { asOf, status: "connected", lastSeen: asOf },
     account: { asOf, equity: account.equity, available: account.available },
     performance: {
-      asOf,
+      asOf: snapshotsOverdue ? last.t : asOf,
       points,
       baseline: { label: "Since tracking began", t: points[0].t },
       cashFlowsReported: true,
@@ -50,7 +58,7 @@ export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [
       },
     ],
     trades: { asOf, items: [...openTrades, ...closed.map((t) => ({ ...t, slot: "featured" }))] },
-    scanner: { asOf, candidates: [] },
+    scanner: scan,
     risk: { asOf, ...(dailyLossCap > 0 ? { dailyLossCap } : {}) },
     events: [],
   };

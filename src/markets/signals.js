@@ -6,6 +6,7 @@ const { config, label, selectSymbol, getSymbol } = window.DASHBOARD;
 const body = document.getElementById("signals-body");
 const status = document.getElementById("signals-status");
 const intervalSelect = document.getElementById("signals-interval");
+const changeHead = document.getElementById("signals-change-head");
 
 let interval = localGet("signals-interval") || "1h";
 if (![...intervalSelect.options].some((o) => o.value === interval)) interval = "1h";
@@ -19,7 +20,20 @@ async function loadOne(symbol) {
   const res = await fetch(`/api/candles?base=${encodeURIComponent(label(symbol))}&interval=${interval}`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return evaluate(data.candles);
+  // Signals use finished candles only; the price column shows the live price.
+  const s = evaluate(data.candles);
+  const first = data.candles[0].time;
+  const last = data.candles[data.candles.length - 1].time;
+  return { ...s, livePrice: data.current?.close ?? s.price, spanSec: last - first };
+}
+
+// "15d", "3.6d", "11mo": the length of the window the Change column covers.
+export function spanLabel(sec) {
+  const days = sec / 86_400;
+  if (days >= 60) return `${Math.round(days / 30.44)}mo`;
+  if (days >= 10) return `${Math.round(days)}d`;
+  if (days >= 1) return `${days.toFixed(1)}d`;
+  return `${Math.round(sec / 3600)}h`;
 }
 
 async function refresh() {
@@ -29,6 +43,9 @@ async function refresh() {
   const results = await Promise.allSettled(config.symbols.map(loadOne));
   if (id !== requestId) return; // a newer refresh superseded this one
   renderRows(results);
+  const ok = results.find((r) => r.status === "fulfilled");
+  changeHead.textContent = ok ? `Change (${spanLabel(ok.value.spanSec)})` : "Change";
+  changeHead.title = ok ? `Price change from the first to the last finished ${interval} candle loaded` : "";
   const failed = results.filter((r) => r.status === "rejected").length;
   status.textContent = `Updated ${new Date().toLocaleTimeString()}` +
     (failed ? ` · ${failed} unavailable` : "");
@@ -54,7 +71,7 @@ function renderRows(results) {
     const s = r.value;
     const [trend, momentum, rsiCheck] = ["trend", "macd", "rsi"].map((id) => s.checks.find((c) => c.id === id));
     tr.append(
-      cell(price.format(s.price)),
+      cell(price.format(s.livePrice)),
       cell(`${s.changePct >= 0 ? "+" : ""}${s.changePct.toFixed(2)}%`, tone(s.changePct)),
       cell(`${s.rsi.toFixed(1)} · ${rsiCheck.note}`, tone(rsiCheck.score)),
       cell(momentum.note, tone(momentum.score)),

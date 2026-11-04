@@ -36,8 +36,22 @@ export function ScannerCard({ data, state, error, onRetry, now, strategies }: {
       >
         {candidates.length === 0 ? (
           <div className="quiet">
-            <div className="strat-status"><StatusDot tone="idle" /><span className="strat-status-label">Quiet market</span></div>
-            <p className="strat-sentence">The scanner hasn't flagged any candidates right now.</p>
+            {scanner?.error ? (
+              <>
+                <div className="strat-status"><StatusDot tone="warn" /><span className="strat-status-label">Scanner unavailable</span></div>
+                <p className="strat-sentence">{scanner.error}</p>
+              </>
+            ) : scanner && !scanner.criteria ? (
+              <>
+                <div className="strat-status"><StatusDot tone="none" /><span className="strat-status-label">Not connected</span></div>
+                <p className="strat-sentence">No scanner is reporting to the dashboard.</p>
+              </>
+            ) : (
+              <>
+                <div className="strat-status"><StatusDot tone="idle" /><span className="strat-status-label">Nothing flagged</span></div>
+                <p className="strat-sentence">No coin on the watchlist has a buy or sell signal right now.</p>
+              </>
+            )}
           </div>
         ) : (
           <ol className="candidates">
@@ -61,11 +75,12 @@ export function ScannerCard({ data, state, error, onRetry, now, strategies }: {
 
       {expanded && scanner && (
         <Modal title="Scanner" subtitle={`As of ${fmtDateTime(scanner.asOf)}`} onClose={() => setExpanded(false)} wide>
+          {scanner.error && <p className="muted">⚠ {scanner.error}</p>}
           <h3>Criteria</h3>
-          <p className={scanner.criteria ? "" : "muted"}>{scanner.criteria ?? "The data source didn't report its scanner criteria."}</p>
+          <p className={scanner.criteria ? "" : "muted"}>{scanner.criteria ?? "No scanner is reporting to the dashboard."}</p>
           <h3>Candidates</h3>
           {candidates.length === 0 ? (
-            <p className="muted">Quiet market: no candidates right now.</p>
+            <p className="muted">No candidates right now.</p>
           ) : (
             <div className="table-scroll">
               <table>

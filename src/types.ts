@@ -112,6 +112,8 @@ export interface ScannerData {
   criteria?: string;
   /** In the order the source ranks them. */
   candidates: ScannerCandidate[];
+  /** Set when the scanner couldn't run; candidates are then the last good result, if any. */
+  error?: string;
 }
 
 export interface RiskData {

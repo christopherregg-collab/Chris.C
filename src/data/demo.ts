@@ -170,6 +170,7 @@ export function demoData(scenario: DemoScenario, nowMs = Date.now()): DashboardD
     trades: { asOf, items: empty ? [] : trades(asOfMs, dayStart, pos) },
     scanner: {
       asOf,
+      criteria: "Demo scanner: illustrative setups, not real signals.",
       candidates: empty ? [] : [
         { symbol: "AVAX-USDT", slot: "lower_1", signal: "Setup forming", updatedAt: iso(asOfMs - 6 * 60_000) },
         { symbol: "LINK-USDT", slot: "lower_1", signal: "Approaching entry", updatedAt: iso(asOfMs - 14 * 60_000) },

@@ -1,6 +1,10 @@
 // Vercel serverless function: GET /api/candles?base=BTC&interval=1h
 // Fetches public OHLC candles from Coinbase Exchange (no API key needed) and
-// returns them oldest-first as { base, interval, candles: [{ time, open, high, low, close, volume }] }.
+// returns them oldest-first as
+//   { base, interval, candles: [...finished candles], current: candle | null }
+// where each candle is { time, open, high, low, close, volume }. `candles` holds
+// only periods that have ended, so signals computed from it don't change while
+// a period is still forming; `current` is the in-progress candle (live price).
 
 const COINBASE = "https://api.exchange.coinbase.com";
 
@@ -13,6 +17,13 @@ export function parseCoinbase(rows) {
   return rows
     .map(([time, low, high, open, close, volume]) => ({ time, open, high, low, close, volume }))
     .sort((a, b) => a.time - b.time);
+}
+
+/** Split oldest-first candles into finished ones and the one still in progress (if any). */
+export function splitClosed(candles, granularitySec, nowSec = Date.now() / 1000) {
+  const last = candles[candles.length - 1];
+  if (last && last.time + granularitySec > nowSec) return { closed: candles.slice(0, -1), current: last };
+  return { closed: candles, current: null };
 }
 
 export async function fetchCandles(base, interval, fetchImpl = fetch) {
@@ -43,10 +54,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const candles = await fetchCandles(base, interval);
+    const { closed, current } = splitClosed(await fetchCandles(base, interval), INTERVALS[interval]);
     // Let Vercel's CDN share one upstream request per symbol/interval per minute.
     res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=120");
-    return send(res, 200, { base, interval, candles });
+    return send(res, 200, { base, interval, candles: closed, current });
   } catch (err) {
     return send(res, err.status || 502, { error: err.message });
   }

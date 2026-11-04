@@ -69,9 +69,12 @@ function fakeClient(overrides = {}) {
   return { get: async (path, params = {}) => (typeof data[path] === "function" ? data[path](params) : data[path]) };
 }
 
+const FAKE_SCAN = { asOf: new Date(NOW).toISOString(), criteria: "test", candidates: [{ symbol: "BTC-USD", signal: "Buy", score: 2, updatedAt: new Date(NOW).toISOString() }] };
+const fakeScanner = async () => FAKE_SCAN;
+
 test("buildDashboard maps BloFin data into DashboardData", async () => {
   const snapshots = [{ t: "2026-11-04T15:00:00.000Z", equity: 900, cashFlow: 0 }];
-  const d = await buildDashboard(fakeClient(), { nowMs: NOW, snapshots, dailyLossCap: 50 });
+  const d = await buildDashboard(fakeClient(), { nowMs: NOW, snapshots, dailyLossCap: 50, scanner: fakeScanner });
   assert.equal(d.mode, "live");
   assert.deepEqual(d.account, { asOf: new Date(NOW).toISOString(), equity: 1050.5, available: 800 });
   assert.equal(d.performance.points.length, 2);
@@ -90,10 +93,19 @@ test("buildDashboard maps BloFin data into DashboardData", async () => {
   assert.ok(closed.closedAt);
   assert.ok(d.trades.items.find((t) => t.id === "open-11" && !t.closedAt));
   assert.equal(d.risk.dailyLossCap, 50);
+  assert.equal(d.scanner, FAKE_SCAN, "scanner output is passed through");
+  assert.equal(d.performance.asOf, new Date(NOW).toISOString(), "recent snapshot: performance is fresh");
+});
+
+test("buildDashboard flags overdue equity snapshots via performance.asOf", async () => {
+  const old = "2026-11-04T13:00:00.000Z"; // 2.5 hours before NOW
+  const d = await buildDashboard(fakeClient(), { nowMs: NOW, snapshots: [{ t: old, equity: 900, cashFlow: 0 }], scanner: fakeScanner });
+  assert.equal(d.performance.asOf, old);
+  assert.equal(d.account.asOf, new Date(NOW).toISOString(), "other sections stay fresh");
 });
 
 test("buildDashboard with no snapshots yet uses the live point as baseline", async () => {
-  const d = await buildDashboard(fakeClient({ "/api/v1/account/positions": [] }), { nowMs: NOW });
+  const d = await buildDashboard(fakeClient({ "/api/v1/account/positions": [] }), { nowMs: NOW, scanner: fakeScanner });
   assert.equal(d.performance.points.length, 1);
   assert.equal(d.performance.points[0].cashFlow, 0);
   assert.equal(d.strategies[0].status, "flat");
