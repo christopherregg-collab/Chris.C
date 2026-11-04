@@ -1,0 +1,5 @@
+# Vercel only proxies to the Hetzner server (see vercel-proxy/README.md).
+# Upload nothing but the proxy config, so no api/ functions are deployed.
+/*
+!vercel.json
+!vercel-proxy
