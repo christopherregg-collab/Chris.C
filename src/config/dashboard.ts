@@ -13,8 +13,8 @@ import type { SlotId, StrategyDisplayConfig } from "../types";
 export const dashboardConfig = {
   name: "My Trading Bot",
   reportingCurrency: "USDT",
-  /** Fill in when the live integration exists, e.g. "BloFin". */
-  exchange: "",
+  /** Shown in Diagnostics. Live data comes from BloFin via /api/dashboard. */
+  exchange: import.meta.env.VITE_DATA_SOURCE === "api" ? "BloFin (read-only)" : "",
   /** IANA time zone for timestamps and for when "today" starts. */
   displayTimezone: "UTC",
 };

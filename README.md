@@ -85,6 +85,30 @@ Stale data and Bot disconnected. The header always shows a **Demo** badge in dem
 
 The cards don't change, because the adapter is the only part that knows where data comes from.
 
+## Live deployment (Hetzner + BloFin)
+
+The live dashboard runs on a Hetzner Cloud server, not Vercel, because BloFin keys can be locked
+to a fixed IP and the equity snapshots need an always-on process.
+
+- `api/dashboard.js` reads BloFin through `server/blofin.js` (GET requests only) and returns
+  `DashboardData`. Open positions appear in the Strategy 1 slot.
+- `server/snapshots.js` records equity once an hour to `data/equity.jsonl`, since BloFin only
+  reports current balances. Transfers into or out of the futures account are cash flows.
+- `server/index.js` serves `dist/` and `/api/*`, requires HTTP Basic auth, and listens on
+  127.0.0.1 only. You reach it through an SSH tunnel: `deploy/open-dashboard.sh`.
+- Credentials go in `.env` (see `.env.example`), on the server at `/opt/trading-bot/.env`.
+
+| Task | Command |
+| --- | --- |
+| First-time server setup (firewall, SSH keys only, auto-updates, Node) | `ssh root@SERVER 'bash -s' < deploy/setup-server.sh` |
+| Build and deploy | `deploy/deploy.sh` |
+| Open the dashboard | `deploy/open-dashboard.sh` |
+| Logs | `ssh root@SERVER journalctl -u trading-bot -n 50` |
+
+The BloFin key is whitelisted to the server's IPv4 address. The service runs Node with
+`--dns-result-order=ipv4first`; without it the server connects over IPv6 and BloFin rejects
+the request (code 152406).
+
 ## Markets page
 
 `/markets.html` keeps the TradingView widgets and the signals table. That table scores each coin

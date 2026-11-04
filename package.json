@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:live": "VITE_DATA_SOURCE=api npm run build",
+    "start": "node --dns-result-order=ipv4first --env-file-if-exists=.env server/index.js",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.js && vitest run"

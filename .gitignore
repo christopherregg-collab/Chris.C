@@ -5,6 +5,7 @@ config.js
 .env.*
 !.env.example
 
+data/
 node_modules/
 dist/
 .vercel/

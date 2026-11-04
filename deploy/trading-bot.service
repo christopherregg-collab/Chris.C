@@ -1,0 +1,31 @@
+[Unit]
+Description=Trading bot dashboard (BloFin read-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=bot
+Group=bot
+WorkingDirectory=/opt/trading-bot
+# ipv4first: BloFin's key whitelist holds the server's IPv4 address; without this
+# Node connects over IPv6 and BloFin rejects the request (code 152406).
+ExecStart=/opt/node/bin/node --dns-result-order=ipv4first --env-file=/opt/trading-bot/.env server/index.js
+Environment=NODE_ENV=production
+Restart=always
+RestartSec=5
+
+# Sandboxing: the app can only write its data folder.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/opt/trading-bot/data
+
+[Install]
+WantedBy=multi-user.target
