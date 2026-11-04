@@ -55,8 +55,10 @@ export default async function handler(req, res) {
 
   try {
     const { closed, current } = splitClosed(await fetchCandles(base, interval), INTERVALS[interval]);
-    // Let Vercel's CDN share one upstream request per symbol/interval per minute.
-    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=120");
+    // Browser-only cache. Not "public": the dashboard sits behind a password, and a
+    // shared cache (such as Vercel in front of the server) would otherwise hand
+    // this response to visitors who haven't logged in.
+    res.setHeader("Cache-Control", "private, max-age=60");
     return send(res, 200, { base, interval, candles: closed, current });
   } catch (err) {
     return send(res, err.status || 502, { error: err.message });

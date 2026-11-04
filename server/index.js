@@ -52,7 +52,9 @@ function serveStatic(pathname, res) {
     return res.end("Not found");
   }
   res.setHeader("Content-Type", TYPES[extname(file)] || "application/octet-stream");
-  res.setHeader("Cache-Control", rel.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache");
+  // "private": everything here is behind the password, so shared caches (Vercel in
+  // front of this server) must not store it and serve it to anyone else.
+  res.setHeader("Cache-Control", rel.startsWith("/assets/") ? "private, max-age=31536000, immutable" : "private, no-cache");
   createReadStream(file).pipe(res);
 }
 

@@ -55,7 +55,7 @@ test("handler returns candles with a CDN cache header", async (t) => {
   assert.equal(res.body.base, "ETH");
   assert.equal(res.body.candles.length, 1);
   assert.equal(res.body.current, null, "a candle from 1970 is long finished");
-  assert.match(res.headers["Cache-Control"], /s-maxage=60/);
+  assert.match(res.headers["Cache-Control"], /^private/, "never cached by shared caches");
 });
 
 test("splitClosed separates the in-progress candle", () => {
