@@ -8,7 +8,7 @@ import { STALE_AFTER_SEC, freshness, ms, type Source } from "../lib/derive";
 import { age, ago, fmtDateTime } from "../lib/format";
 import { SLOTS, type DashboardData, type HealthStatus, type SlotId, type StrategyDisplayConfig } from "../types";
 import { StatusDot } from "./Card";
-import { BellIcon, LogoMark, MoonIcon, PulseIcon, SearchIcon, SunIcon } from "./Icons";
+import { BellIcon, LogoMark, LogoutIcon, MoonIcon, PulseIcon, SearchIcon, SunIcon } from "./Icons";
 import { Modal } from "./Modal";
 
 const HEALTH: Record<HealthStatus, { label: string; tone: "ok" | "warn" | "error" }> = {
@@ -56,12 +56,12 @@ export function Header({ state, now, theme, onToggleTheme, onReload, onGoTo, str
         {adapter.kind === "demo" && (
           <span className="badge badge--demo" title="Showing demo fixtures, not a live bot or exchange account">Demo</span>
         )}
-        {state.status === "loading" && <span className="health"><StatusDot tone="idle" /> Loading…</span>}
-        {state.status === "error" && <span className="health health--error"><StatusDot tone="error" /> Data unavailable</span>}
+        {state.status === "loading" && <span className="health" title="Loading…"><StatusDot tone="idle" /><span className="health-label">Loading…</span></span>}
+        {state.status === "error" && <span className="health health--error" title="Data unavailable"><StatusDot tone="error" /><span className="health-label">Data unavailable</span></span>}
         {healthInfo && health && (
           <span
             className={`health health--${healthStale ? "warn" : healthInfo.tone}`}
-            title={data.mode === "demo" ? "Simulated by the demo data, not a live bot" : undefined}
+            title={`${healthStale ? "No heartbeat" : healthInfo.label}${data.mode === "demo" ? " (simulated by the demo data, not a live bot)" : ""}`}
           >
             <StatusDot tone={healthStale ? "warn" : healthInfo.tone} />
             <span className="health-label">
@@ -73,8 +73,8 @@ export function Header({ state, now, theme, onToggleTheme, onReload, onGoTo, str
           </span>
         )}
         {state.status === "ready" && state.error && (
-          <button type="button" className="health health--error health--btn" onClick={() => setPanel("diagnostics")}>
-            <StatusDot tone="error" /> Refresh failed
+          <button type="button" className="health health--error health--btn" title="Refresh failed" onClick={() => setPanel("diagnostics")}>
+            <StatusDot tone="error" /><span className="health-label">Refresh failed</span>
           </button>
         )}
       </div>
@@ -98,6 +98,14 @@ export function Header({ state, now, theme, onToggleTheme, onReload, onGoTo, str
         <button type="button" className="icon-btn" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} onClick={onToggleTheme}>
           {theme === "dark" ? <SunIcon /> : <MoonIcon />}
         </button>
+        {adapter.kind === "api" && (
+          // A plain form POST: the server clears the session cookie and shows the login page.
+          <form method="post" action="/logout" className="toolbar-form">
+            <button type="submit" className="icon-btn" aria-label="Log out" title="Log out">
+              <LogoutIcon />
+            </button>
+          </form>
+        )}
       </nav>
 
       {panel === "search" && data && (

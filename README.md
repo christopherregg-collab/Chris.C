@@ -93,8 +93,10 @@ to a fixed IP and the equity snapshots need an always-on process.
   `DashboardData`. Open positions appear in the Strategy 1 slot.
 - `server/snapshots.js` records equity once an hour to `data/equity.jsonl`, since BloFin only
   reports current balances. Transfers into or out of the futures account are cash flows.
-- `server/index.js` serves `dist/` and `/api/*`, requires HTTP Basic auth, and listens on
-  127.0.0.1 only. Caddy in front of it serves `https://2-29-115-23.sslip.io` with a Let's
+- `server/index.js` serves `dist/` and `/api/*` and listens on 127.0.0.1 only. Everything
+  except `/login` needs a session: one user (`DASHBOARD_EMAIL`), a password stored as a
+  salted scrypt hash, and a signed 7-day cookie (`server/auth.js`, `server/login-page.js`).
+  Failed logins are delayed and rate-limited. Changing the password logs out every session. Caddy in front of it serves `https://2-29-115-23.sslip.io` with a Let's
   Encrypt certificate (`deploy/setup-https.sh`). The SSH tunnel (`deploy/open-dashboard.sh`)
   still works too.
 - Vercel only forwards: `vercel.json` rewrites every path to the Hetzner server, and
@@ -107,7 +109,8 @@ to a fixed IP and the equity snapshots need an always-on process.
 | First-time server setup (firewall, SSH keys only, auto-updates, Node) | `ssh root@SERVER 'bash -s' < deploy/setup-server.sh` |
 | HTTPS with Caddy (opens ports 80/443) | `ssh root@SERVER 'HOSTNAME_FQDN=… bash -s' < deploy/setup-https.sh` |
 | Build and deploy | `deploy/deploy.sh` |
-| Open the dashboard | `deploy/open-dashboard.sh` |
+| Set or change the login (asks for the password, sends only a hash) | `deploy/set-login.sh` |
+| Open the dashboard | https://chrisc-ashen.vercel.app, or `deploy/open-dashboard.sh` over SSH |
 | Logs | `ssh root@SERVER journalctl -u trading-bot -n 50` |
 
 The BloFin key is whitelisted to the server's IPv4 address. The service runs Node with

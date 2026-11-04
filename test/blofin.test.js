@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { buildPath, createClient, credentialsFromEnv, sign } from "../server/blofin.js";
 import { readSnapshots, snapshotIfDue } from "../server/snapshots.js";
 import { buildDashboard } from "../api/dashboard.js";
-import { authorized } from "../server/index.js";
 
 test("sign is base64 of the hex HMAC string, as BloFin documents", () => {
   const hex = createHmac("sha256", "s3cret").update("abc").digest("hex");
@@ -123,12 +122,4 @@ test("snapshotIfDue records at most one snapshot per hour", async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-});
-
-test("basic auth accepts only the configured login", () => {
-  const h = (s) => "Basic " + Buffer.from(s).toString("base64");
-  assert.equal(authorized(h("me:pw"), "me", "pw"), true);
-  assert.equal(authorized(h("me:nope"), "me", "pw"), false);
-  assert.equal(authorized(undefined, "me", "pw"), false);
-  assert.equal(authorized(h("me:pw"), "", ""), false, "no password configured means locked");
 });

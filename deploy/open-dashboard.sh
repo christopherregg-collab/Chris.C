@@ -1,7 +1,7 @@
 #!/bin/bash
-# Opens the dashboard on the server through an encrypted SSH tunnel.
-# The dashboard is never exposed to the internet; only your SSH key can reach it.
-# Login: DASHBOARD_USER / DASHBOARD_PASSWORD from .env in this folder.
+# Opens the dashboard on the server through an encrypted SSH tunnel, as an
+# alternative to the public address (https://chrisc-ashen.vercel.app).
+# Log in with DASHBOARD_EMAIL and the password you set with deploy/set-login.sh.
 SERVER="${SERVER:-root@2.29.115.23}"
 KEY="${KEY:-$HOME/.ssh/hetzner_bot}"
 PORT="${PORT:-3300}"

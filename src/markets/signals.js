@@ -18,6 +18,8 @@ const price = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD
 
 async function loadOne(symbol) {
   const res = await fetch(`/api/candles?base=${encodeURIComponent(label(symbol))}&interval=${interval}`);
+  // Session expired: go to the login page, then come back here.
+  if (res.status === 401) location.assign(`/login?next=${encodeURIComponent(location.pathname)}`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   // Signals use finished candles only; the price column shows the live price.

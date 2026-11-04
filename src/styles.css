@@ -214,14 +214,17 @@ ul, ol { padding: 0; list-style: none; }
   .icon-btn { width: 30px; height: 30px; }
   .brand { gap: 8px; }
 }
-/* Narrow phones: the health pill collapses to its dot; the label stays for screen readers. */
+/* Phones: the health pill collapses to its dot so it never runs into the toolbar;
+   the label stays for screen readers and as a tooltip. */
+@media (max-width: 699px) {
+  .health { padding: 0; width: 24px; height: 24px; justify-content: center; flex: none; }
+  .health-label, .health-meta { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 @media (max-width: 480px) {
   .brand { gap: 6px; }
   .toolbar { gap: 3px; }
   .icon-btn { width: 28px; height: 28px; }
   .logo { width: 26px; height: 26px; }
-  .health { padding: 0; width: 24px; height: 24px; justify-content: center; }
-  .health-label, .health-meta { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .brand-name { font-size: 14px; }
 }
 
@@ -546,3 +549,4 @@ th.num, td.num { text-align: right; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+.toolbar-form { display: contents; }

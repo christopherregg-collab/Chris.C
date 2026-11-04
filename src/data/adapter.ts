@@ -46,6 +46,11 @@ export const apiAdapter: DashboardAdapter = {
   describe: "Server API (GET /api/dashboard)",
   async load(signal) {
     const res = await fetch("/api/dashboard", { signal, headers: { Accept: "application/json" } });
+    if (res.status === 401) {
+      // Session expired or logged out elsewhere: go to the login page, then come back.
+      window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+      throw new Error("Not logged in. Redirecting to the login page…");
+    }
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error ?? `The dashboard API returned HTTP ${res.status}.`);
