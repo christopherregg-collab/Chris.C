@@ -133,6 +133,8 @@ export interface BotEvent {
 
 export interface DashboardData {
   mode: "demo" | "live";
+  /** Which exchange account live data comes from: the real one, or the exchange's demo (paper) account. */
+  exchangeAccount?: "real" | "demo";
   currency: string;
   health: BotHealth;
   account: AccountSummary;

@@ -123,3 +123,38 @@ test("snapshotIfDue records at most one snapshot per hour", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("dashboardAccount picks the demo account, its keys and its own equity history", async () => {
+  const { dashboardAccount } = await import("../server/account.js");
+  const { DEMO_BASE } = await import("../lib/trader/blofin-exchange.js");
+  const real = dashboardAccount({ BLOFIN_API_KEY: "r", BLOFIN_API_SECRET: "s", BLOFIN_API_PASSPHRASE: "p" });
+  assert.equal(real.kind, "real");
+  assert.equal(real.creds.key, "r");
+  const demo = dashboardAccount({ DASHBOARD_ACCOUNT: "demo", BLOFIN_API_KEY: "r", BLOFIN_DEMO_API_KEY: "d", BLOFIN_DEMO_API_SECRET: "s", BLOFIN_DEMO_API_PASSPHRASE: "p" });
+  assert.equal(demo.kind, "demo");
+  assert.equal(demo.creds.key, "d");
+  assert.equal(demo.base, DEMO_BASE);
+  assert.notEqual(demo.snapshotFile, real.snapshotFile);
+  assert.equal(dashboardAccount({ DASHBOARD_ACCOUNT: "demo" }).creds, null);
+});
+
+test("in demo mode, account trades are marked paper and not listed twice", async () => {
+  const state = { version: 1, realized: 0, peak: 60, coins: {}, trades: [{ sym: "SOL-USDT", side: "long", openedAt: "2026-11-01T00:00:00.000Z", closedAt: "2026-11-02T00:00:00.000Z", pnl: 1 }], updatedAt: "2026-11-05T00:00:00.000Z", view: { positions: [], entering: [] } };
+  const client = {
+    get: async (path) => {
+      if (path === "/api/v1/account/balance") return { totalEquity: "2000", details: [] };
+      if (path === "/api/v1/account/positions-history") return [{ historyId: "1", instId: "SOL-USDT", positionSide: "net", createTime: String(Date.UTC(2026, 10, 1)), updateTime: String(Date.UTC(2026, 10, 2)), realizedPnl: "1" }];
+      if (path === "/api/v1/asset/bills") throw new Error("no funding account on demo");
+      return [];
+    },
+  };
+  const d = await buildDashboard(client, {
+    nowMs: Date.UTC(2026, 10, 5), scanner: fakeScanner, snapshots: [{ t: "2026-11-04T23:00:00.000Z", equity: 2000, cashFlow: 0 }],
+    paper: { state, events: [] }, source: { kind: "demo", label: "BloFin demo account" },
+  });
+  assert.equal(d.exchangeAccount, "demo");
+  assert.equal(d.account.equity, 2000);
+  assert.equal(d.trades.items.length, 1, "the paper trader's trade appears once");
+  assert.ok(d.trades.items.every((t) => t.paper));
+  assert.match(d.strategies[0].message, /demo account/);
+});

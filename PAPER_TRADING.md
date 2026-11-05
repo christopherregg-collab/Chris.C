@@ -45,6 +45,11 @@ curl -fsSL -o update.sh raw.githubusercontent.com/christopherregg-collab/Chris.C
 bash update.sh
 ```
 
+To have the **whole dashboard** show the demo account (equity, positions, trades, chart) instead
+of your real account, run `bash deploy/dashboard-account.sh demo` on the server; switch back with
+`bash deploy/dashboard-account.sh real`. A "BloFin demo account" badge shows which one you're on,
+and each account keeps its own equity history.
+
 ## Check on it
 
 On the server (`ssh` in, then `cd /opt/trading-bot`):
