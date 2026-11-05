@@ -78,7 +78,7 @@ A fall of 25% from the peak trips the kill switch: flatten and stop trading. At 
 history (or 0.01% per 8h when there is none). Liquidation is checked before stops on every bar:
 if the account's equity at the bar's worst prices falls to the maintenance margin, the pot is lost.
 
-All of these are settings in `lib/backtest/config.js`.
+All of these are settings in `lib/backtest/settings.js`.
 
 ## Reading the report
 
@@ -98,7 +98,7 @@ rather than going live.
 
 | Path | What it is |
 | --- | --- |
-| `lib/backtest/config.js` | Every setting: strategies, levels, ladder, limits, costs |
+| `lib/backtest/settings.js` | Every setting: strategies, levels, ladder, limits, costs |
 | `lib/backtest/engine.js` | Bar-by-bar simulation |
 | `lib/backtest/ladder.js` | Win-streak risk ladder |
 | `lib/backtest/ta.js` | ATR, ADX, Donchian channels, higher-timeframe trend |

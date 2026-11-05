@@ -4,7 +4,7 @@
 //   npm run backtest:fetch                 (up to 5 years)
 //   npm run backtest:fetch -- --days 730
 
-import { STRATEGIES } from "../lib/backtest/config.js";
+import { STRATEGIES } from "../lib/backtest/settings.js";
 import { downloadAll } from "../lib/backtest/blofin-data.js";
 
 const i = process.argv.indexOf("--days");

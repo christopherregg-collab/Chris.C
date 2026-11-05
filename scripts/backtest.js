@@ -10,7 +10,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { COSTS, DEFAULT_ALLOCATION, DEFAULT_SPECS, LADDER, LEVELS, LIMITS, STRATEGIES } from "../lib/backtest/config.js";
+import { COSTS, DEFAULT_ALLOCATION, DEFAULT_SPECS, LADDER, LEVELS, LIMITS, STRATEGIES } from "../lib/backtest/settings.js";
 import { runBacktest } from "../lib/backtest/engine.js";
 import { monteCarlo, summarize } from "../lib/backtest/stats.js";
 import { syntheticMarket } from "../lib/backtest/synthetic.js";

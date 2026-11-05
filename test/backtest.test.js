@@ -6,7 +6,7 @@ import { runBacktest, signalAt } from "../lib/backtest/engine.js";
 import { summarize, monteCarlo, maxDrawdown } from "../lib/backtest/stats.js";
 import { syntheticMarket } from "../lib/backtest/synthetic.js";
 import { parseCandle, fetchCandles, fetchSpecs, fetchFunding, barLabel } from "../lib/backtest/blofin-data.js";
-import { COSTS, LADDER, LEVELS, LIMITS, STRATEGIES, DEFAULT_SPECS } from "../lib/backtest/config.js";
+import { COSTS, LADDER, LEVELS, LIMITS, STRATEGIES, DEFAULT_SPECS } from "../lib/backtest/settings.js";
 
 const HOUR = 3_600_000;
 const T0 = Date.UTC(2025, 0, 1);
