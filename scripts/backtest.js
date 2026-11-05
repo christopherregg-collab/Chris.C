@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Momentum backtest: Core Momentum and Big Swing at three aggression levels.
+// Backtest: Core Trend and Big Swing at three aggression levels, plus a rolling
+// walk-forward test of each.
 //
-//   npm run backtest:fetch                 download BloFin data (run on the server; ~2 years)
+//   npm run backtest:fetch                 download BloFin data
 //   npm run backtest                       backtest on the downloaded data
 //   npm run backtest -- --synthetic        backtest on simulated data (engine check only)
 //
@@ -10,7 +11,8 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { COSTS, DEFAULT_ALLOCATION, DEFAULT_SPECS, LADDER, LEVELS, LIMITS, STRATEGIES } from "../lib/backtest/settings.js";
+import { COSTS, DEFAULT_ALLOCATION, DEFAULT_SPECS, LADDER, LEVELS, LIMITS, STRATEGIES, WALK_FORWARD } from "../lib/backtest/settings.js";
+import { walkForward, scoreTrades } from "../lib/backtest/walkforward.js";
 import { runBacktest } from "../lib/backtest/engine.js";
 import { monteCarlo, summarize } from "../lib/backtest/stats.js";
 import { syntheticMarket } from "../lib/backtest/synthetic.js";
@@ -35,26 +37,33 @@ function parseArgs(argv) {
 const opt = parseArgs(process.argv.slice(2));
 const symbols = [...new Set(Object.values(STRATEGIES).flatMap((s) => s.symbols))];
 const barLengths = [...new Set(Object.values(STRATEGIES).map((s) => s.barMs))];
-if (barLengths.length !== 1) throw new Error("all strategies must use the same candle length");
-const barMs = barLengths[0];
 const allocation = { core: Number(opt.core ?? DEFAULT_ALLOCATION.core), swing: Number(opt.swing ?? DEFAULT_ALLOCATION.swing) };
 const split = Number(opt.split ?? 0.7);
 const limits = { ...LIMITS, killSwitch: opt["no-kill"] ? null : LIMITS.killSwitch };
 const outDir = opt.out ?? "data/backtest";
 
+// Candles for each candle length the strategies use: { barMs: { symbol: candles[] } }.
 let source;
-let data;
+const markets = {};
 let funding = {};
 let specs = {};
 if (opt.synthetic) {
   source = "SIMULATED data (engine check only, not a profit estimate)";
   const hourly = syntheticMarket({ symbols: symbols.slice(0, 2) });
-  data = Object.fromEntries(Object.entries(hourly).map(([sym, c]) =>
-    [sym, resample(c, barMs, HOUR).filter((b) => b.complete).map(({ end, complete, ...b }) => b)]));
+  for (const ms of barLengths) {
+    markets[ms] = Object.fromEntries(Object.entries(hourly).map(([sym, c]) =>
+      [sym, resample(c, ms, HOUR).filter((b) => b.complete).map(({ end, complete, ...b }) => b)]));
+  }
 } else {
-  ({ data, funding, specs } = loadBlofin(opt.dir ?? "data/blofin", symbols, barMs));
-  source = `BloFin ${barLabel(barMs)} candles`;
+  for (const ms of barLengths) {
+    const loaded = loadBlofin(opt.dir ?? "data/blofin", symbols, ms);
+    markets[ms] = loaded.data;
+    funding = loaded.funding;
+    specs = loaded.specs;
+  }
+  source = `BloFin ${barLengths.map(barLabel).join(" and ")} candles`;
 }
+const data = markets[Math.min(...barLengths)]; // finest candles: used for dates and buy and hold
 const traded = symbols.filter((sym) => data[sym]?.length);
 specs = { ...DEFAULT_SPECS, ...specs };
 
@@ -71,11 +80,13 @@ const num = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : "∞");
 const money = (x) => `$${x.toFixed(2)}`;
 const day = (t) => new Date(t).toISOString().slice(0, 10);
 
+const baseFor = (key, levelKey, lim = limits) => ({
+  level: LEVELS[levelKey], ladder: LADDER, limits: lim, costs: COSTS, specs,
+  data: markets[STRATEGIES[key].barMs], funding,
+});
+
 function run(key, levelKey, range, lim = limits) {
-  return runBacktest({
-    strategy: STRATEGIES[key], level: LEVELS[levelKey], ladder: LADDER, limits: lim, costs: COSTS, specs,
-    data, funding, startEquity: allocation[key], ...range,
-  });
+  return runBacktest({ ...baseFor(key, levelKey, lim), strategy: STRATEGIES[key], startEquity: allocation[key], ...range });
 }
 
 const rows = [];
@@ -94,23 +105,69 @@ for (const key of Object.keys(STRATEGIES)) {
   }
 }
 
-// Buy and hold each symbol over the same period, for comparison.
-const hold = traded.map((sym) => {
-  const c = data[sym].filter((x) => x.time >= from);
-  return { symbol: sym, since: c[0].time, ret: c[c.length - 1].close / c[0].open - 1 };
-});
+// Buy and hold each symbol, and an equal split across all of them, from `start`.
+function buyAndHold(start) {
+  return traded.map((sym) => {
+    const c = data[sym].filter((x) => x.time >= start);
+    return { symbol: sym, since: c[0].time, ret: c[c.length - 1].close / c[0].open - 1 };
+  });
+}
+const hold = buyAndHold(from);
+const basket = (h) => h.reduce((a, x) => a + x.ret, 0) / h.length;
+
+// Walk-forward: Conservative level, kill switch off, so every window trades.
+const wf = WALK_FORWARD;
+const wfRows = [];
+for (const key of Object.keys(STRATEGIES)) {
+  const s = STRATEGIES[key];
+  const noKill = { ...limits, killSwitch: null };
+  const result = walkForward({
+    strategy: s, grid: s.walkForward?.grid, base: baseFor(key, "conservative", noKill),
+    from, to: last + 1, trainMs: wf.trainDays * DAY, testMs: wf.testDays * DAY, startEquity: allocation[key],
+  });
+  const fixed = runBacktest({ ...baseFor(key, "conservative", noKill), strategy: s, startEquity: allocation[key], from: result.start });
+  wfRows.push({
+    key, strategy: s.label, result,
+    wfStats: { ...summarize({ ...result, funding: 0, skippedMinSize: 0, liquidations: 0, killed: false }), rPF: scoreTrades(result.trades, 0) },
+    fixedStats: { ...summarize(fixed), rPF: scoreTrades(fixed.trades, 0) },
+    hold: basket(buyAndHold(result.start)),
+  });
+}
 
 const lines = [];
 const p = (s = "") => lines.push(s);
-p(`# Momentum backtest`);
+p(`# Backtest: ${Object.values(STRATEGIES).map((s) => s.label).join(" and ")}`);
 p();
 p(`- Data: ${source}, ${traded.map((sym) => `${sym} from ${day(data[sym][0].time)}`).join(", ")}`);
 p(`- Period: ${day(from)} to ${day(last)} (in-sample to ${day(cut)}, out-of-sample after)`);
-p(`- Starting money: Core Momentum ${money(allocation.core)}, Big Swing ${money(allocation.swing)}`);
+p(`- Starting money: ${Object.keys(STRATEGIES).map((k) => `${STRATEGIES[k].label} ${money(allocation[k])}`).join(", ")}`);
 p(`- Entries: ${Object.values(STRATEGIES).map((s) => `${s.label} ${s.entry?.type === "limit" ? `limit orders (wait ${s.entry.waitBars ?? 1} candle)` : "market orders"}`).join(", ")}`);
 p(`- Costs: maker fee ${pct(COSTS.makerFee, 2)} on limit fills, taker fee ${pct(COSTS.takerFee, 2)} + slippage ${pct(COSTS.slippage, 2)} on market fills, funding ${Object.keys(funding).length ? "from BloFin history" : `assumed ${pct(COSTS.defaultFundingRate, 2)} per 8h`}`);
-p(`- Limits: daily loss cap ${pct(limits.dailyLossCap, 0)}, kill switch ${limits.killSwitch === null ? "off" : pct(limits.killSwitch, 0) + " from peak"}, max ${limits.maxOpenPositions} positions`);
-p(`- Buy and hold (from the test start, or listing): ${hold.map((h) => `${h.symbol} ${pct(h.ret)}`).join(", ")}`);
+p(`- Limits: daily loss cap ${pct(limits.dailyLossCap, 0)}, kill switch ${limits.killSwitch === null ? "off" : pct(limits.killSwitch, 0) + " from peak"}`);
+p(`- Buy and hold (from the test start, or listing): ${hold.map((h) => `${h.symbol} ${pct(h.ret)}`).join(", ")}; equal split ${pct(basket(hold))}`);
+p();
+p(`## Walk-forward test`);
+p();
+p(`The honest test. Each quarter, the settings are chosen from the grid using only the previous ${wf.trainDays} days, then traded for the next ${wf.testDays} days. Only those unseen quarters count. Conservative level, kill switch off. "Fixed" runs the default settings over the same period for comparison. PF (R) is the profit factor in units of risk, so position sizing doesn't affect it.`);
+p();
+p(`| Strategy | Method | Period | Return | CAGR | Max DD | Trades | Win rate | PF ($) | PF (R) | Buy and hold (equal split) |`);
+p(`|---|---|---|---|---|---|---|---|---|---|---|`);
+for (const w of wfRows) {
+  for (const [label, m] of [["Walk-forward", w.wfStats], ["Fixed defaults", w.fixedStats]]) {
+    p(`| ${w.strategy} | ${label} | ${day(w.result.start)} to ${day(last)} | ${pct(m.totalReturn)} | ${pct(m.cagr)} | ${pct(m.maxDrawdown)} | ${m.trades} | ${pct(m.winRate, 0)} | ${num(m.profitFactor)} | ${num(m.rPF)} | ${pct(w.hold)} |`);
+  }
+}
+p();
+p(`Settings chosen in each window:`);
+p();
+p(`| Strategy | Test window | Chosen settings | Training PF (R) | Trades | Window return |`);
+p(`|---|---|---|---|---|---|`);
+for (const w of wfRows) {
+  for (const win of w.result.windows) {
+    const params = Object.entries(win.params).map(([k, v]) => `${k} ${v}`).join(", ") || "defaults";
+    p(`| ${w.strategy} | ${day(win.start)} to ${day(win.end)} | ${params} | ${win.trainScore === null ? "too few trades" : num(win.trainScore)} | ${win.trades} | ${pct(win.startEquity > 0 ? win.endEquity / win.startEquity - 1 : 0)} |`);
+  }
+}
 p();
 p(`## Results`);
 p();
@@ -172,6 +229,6 @@ for (const r of rows) {
 const report = lines.join("\n") + "\n";
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "report.md"), report);
-writeFileSync(join(outDir, "report.json"), JSON.stringify({ source, from, to: last, cut, allocation, hold, rows }, null, 2));
+writeFileSync(join(outDir, "report.json"), JSON.stringify({ source, from, to: last, cut, allocation, hold, rows, walkForward: wfRows }, null, 2));
 console.log(report);
 console.log(`Saved ${join(outDir, "report.md")} and report.json (with every trade).`);

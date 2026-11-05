@@ -321,3 +321,59 @@ test("barLabel maps candle lengths to BloFin's names", () => {
   assert.equal(barLabel(4 * HOUR), "4H");
   assert.throws(() => barLabel(7));
 });
+
+test("funding is charged for every funding time inside a long bar", () => {
+  const DAYMS = 24 * HOUR;
+  const strategy = { ...TEST_STRATEGY, barMs: DAYMS };
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], [106, 107, 105, 106], ...flat(2, 106)];
+  const costs = { ...NO_COSTS, defaultFundingRate: 0.001 };
+  const r = runBacktest({
+    strategy, level: LEVEL, ladder: LADDER, limits: LIM, costs, specs: SPECS,
+    data: { X: rows.map(([open, high, low, close], i) => ({ time: T0 + i * DAYMS, open, high, low, close, volume: 1 })) },
+    startEquity: 1000,
+  });
+  const t = r.trades[0];
+  const days = (t.closeTime - t.openTime) / DAYMS;
+  near(r.funding, t.qty * 106 * 0.001 * 3 * days, 1e-6);
+});
+
+test("long-only strategies never short, and the trend signal follows a rising EMA", () => {
+  const down = Array.from({ length: 60 }, (_, i) => [200 - i, 201 - i, 199 - i, 200 - i]);
+  const both = bt([...flat(30), [100, 100, 94, 95], [94, 95, 93, 94], ...flat(3, 94)]);
+  assert.equal(both.trades[0].side, "short");
+  const longOnly = bt([...flat(30), [100, 100, 94, 95], [94, 95, 93, 94], ...flat(3, 94)], { strategy: { ...TEST_STRATEGY, sides: "long" } });
+  assert.equal(longOnly.trades.length, 0);
+  const trend = { ...TEST_STRATEGY, signal: "trend", trendEma: 10, breakout: null, exitChannel: null, exitEma: true, sides: "long" };
+  const up = Array.from({ length: 60 }, (_, i) => [100 + i, 101 + i, 99 + i, 100 + i]);
+  const r = bt([...down, ...up, ...down.slice(0, 20).map(([o, h, l, c]) => [o - 41, h - 41, l - 41, c - 41])], { strategy: trend });
+  assert.ok(r.trades.length >= 1);
+  assert.ok(r.trades.every((x) => x.side === "long"));
+  assert.ok(r.trades.some((x) => x.reason === "trend lost" || x.reason === "stop"));
+});
+
+// --- walk-forward -----------------------------------------------------------
+
+import { combinations, scoreTrades, walkForward } from "../lib/backtest/walkforward.js";
+
+test("combinations expands a parameter grid", () => {
+  assert.deepEqual(combinations({ a: [1, 2], b: [3] }), [{ a: 1, b: 3 }, { a: 2, b: 3 }]);
+  assert.deepEqual(combinations(undefined), [{}]);
+});
+
+test("scoreTrades is the profit factor in R, and needs enough trades", () => {
+  assert.equal(scoreTrades([{ r: 2 }, { r: -1 }], 2), 2);
+  assert.equal(scoreTrades([{ r: 2 }], 2), -Infinity);
+});
+
+test("walkForward only trades windows after the training period and carries equity", () => {
+  const data = syntheticMarket({ hours: 300 * 24 });
+  const s = { ...STRATEGIES.swing, symbols: ["BTC-USDT", "ETH-USDT"], barMs: HOUR };
+  const base = { level: LEVELS.conservative, ladder: LADDER, limits: { ...LIMITS, killSwitch: null }, costs: COSTS, specs: DEFAULT_SPECS, data };
+  const from = data["BTC-USDT"][0].time;
+  const DAYMS = 24 * HOUR;
+  const r = walkForward({ strategy: s, grid: { trailAtr: [3, 4] }, base, from, to: from + 300 * DAYMS, trainMs: 120 * DAYMS, testMs: 60 * DAYMS, startEquity: 100, minTrades: 1 });
+  assert.equal(r.windows.length, 3);
+  assert.ok(r.trades.every((t) => t.openTime >= from + 120 * DAYMS));
+  for (let i = 1; i < r.windows.length; i++) assert.equal(r.windows[i].startEquity, r.windows[i - 1].endEquity);
+  assert.equal(r.endEquity, r.windows.at(-1).endEquity);
+});
