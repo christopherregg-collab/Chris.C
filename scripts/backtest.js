@@ -14,7 +14,8 @@ import { COSTS, DEFAULT_ALLOCATION, DEFAULT_SPECS, LADDER, LEVELS, LIMITS, STRAT
 import { runBacktest } from "../lib/backtest/engine.js";
 import { monteCarlo, summarize } from "../lib/backtest/stats.js";
 import { syntheticMarket } from "../lib/backtest/synthetic.js";
-import { loadBlofin } from "../lib/backtest/blofin-data.js";
+import { barLabel, loadBlofin } from "../lib/backtest/blofin-data.js";
+import { resample } from "../lib/backtest/ta.js";
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -33,6 +34,9 @@ function parseArgs(argv) {
 
 const opt = parseArgs(process.argv.slice(2));
 const symbols = [...new Set(Object.values(STRATEGIES).flatMap((s) => s.symbols))];
+const barLengths = [...new Set(Object.values(STRATEGIES).map((s) => s.barMs))];
+if (barLengths.length !== 1) throw new Error("all strategies must use the same candle length");
+const barMs = barLengths[0];
 const allocation = { core: Number(opt.core ?? DEFAULT_ALLOCATION.core), swing: Number(opt.swing ?? DEFAULT_ALLOCATION.swing) };
 const split = Number(opt.split ?? 0.7);
 const limits = { ...LIMITS, killSwitch: opt["no-kill"] ? null : LIMITS.killSwitch };
@@ -44,15 +48,19 @@ let funding = {};
 let specs = {};
 if (opt.synthetic) {
   source = "SIMULATED data (engine check only, not a profit estimate)";
-  data = syntheticMarket({ symbols });
+  const hourly = syntheticMarket({ symbols: symbols.slice(0, 2) });
+  data = Object.fromEntries(Object.entries(hourly).map(([sym, c]) =>
+    [sym, resample(c, barMs, HOUR).filter((b) => b.complete).map(({ end, complete, ...b }) => b)]));
 } else {
-  ({ data, funding, specs } = loadBlofin(opt.dir ?? "data/blofin", symbols));
-  source = "BloFin hourly candles";
+  ({ data, funding, specs } = loadBlofin(opt.dir ?? "data/blofin", symbols, barMs));
+  source = `BloFin ${barLabel(barMs)} candles`;
 }
+const traded = symbols.filter((sym) => data[sym]?.length);
 specs = { ...DEFAULT_SPECS, ...specs };
 
-const first = Math.max(...symbols.map((s) => data[s][0].time));
-const last = Math.min(...symbols.map((s) => data[s][data[s].length - 1].time));
+// Coins with shorter histories join the test when their data starts.
+const first = Math.min(...traded.map((s) => data[s][0].time));
+const last = Math.max(...traded.map((s) => data[s][data[s].length - 1].time));
 // The daily-trend filter needs ~50 days of history before it can say anything; skip that warm-up.
 const from = first + 55 * DAY;
 if (from >= last) throw new Error("not enough data: need more than 55 days of candles");
@@ -87,21 +95,22 @@ for (const key of Object.keys(STRATEGIES)) {
 }
 
 // Buy and hold each symbol over the same period, for comparison.
-const hold = symbols.map((sym) => {
+const hold = traded.map((sym) => {
   const c = data[sym].filter((x) => x.time >= from);
-  return { symbol: sym, ret: c[c.length - 1].close / c[0].open - 1 };
+  return { symbol: sym, since: c[0].time, ret: c[c.length - 1].close / c[0].open - 1 };
 });
 
 const lines = [];
 const p = (s = "") => lines.push(s);
 p(`# Momentum backtest`);
 p();
-p(`- Data: ${source}, ${symbols.join(", ")}`);
+p(`- Data: ${source}, ${traded.map((sym) => `${sym} from ${day(data[sym][0].time)}`).join(", ")}`);
 p(`- Period: ${day(from)} to ${day(last)} (in-sample to ${day(cut)}, out-of-sample after)`);
 p(`- Starting money: Core Momentum ${money(allocation.core)}, Big Swing ${money(allocation.swing)}`);
-p(`- Costs: taker fee ${pct(COSTS.takerFee, 2)}, slippage ${pct(COSTS.slippage, 2)} per fill, funding ${Object.keys(funding).length ? "from BloFin history" : `assumed ${pct(COSTS.defaultFundingRate, 2)} per 8h`}`);
+p(`- Entries: ${Object.values(STRATEGIES).map((s) => `${s.label} ${s.entry?.type === "limit" ? `limit orders (wait ${s.entry.waitBars ?? 1} candle)` : "market orders"}`).join(", ")}`);
+p(`- Costs: maker fee ${pct(COSTS.makerFee, 2)} on limit fills, taker fee ${pct(COSTS.takerFee, 2)} + slippage ${pct(COSTS.slippage, 2)} on market fills, funding ${Object.keys(funding).length ? "from BloFin history" : `assumed ${pct(COSTS.defaultFundingRate, 2)} per 8h`}`);
 p(`- Limits: daily loss cap ${pct(limits.dailyLossCap, 0)}, kill switch ${limits.killSwitch === null ? "off" : pct(limits.killSwitch, 0) + " from peak"}, max ${limits.maxOpenPositions} positions`);
-p(`- Buy and hold: ${hold.map((h) => `${h.symbol} ${pct(h.ret)}`).join(", ")}`);
+p(`- Buy and hold (from the test start, or listing): ${hold.map((h) => `${h.symbol} ${pct(h.ret)}`).join(", ")}`);
 p();
 p(`## Results`);
 p();
@@ -132,12 +141,27 @@ p(`| Strategy | Level | In-sample return | In-sample PF | Out-of-sample return |
 p(`|---|---|---|---|---|---|---|`);
 for (const r of rows) p(`| ${r.strategy} | ${r.level} | ${pct(r.ins.totalReturn)} | ${num(r.ins.profitFactor)} | ${pct(r.oos.totalReturn)} | ${num(r.oos.profitFactor)} | ${r.oos.trades} |`);
 p();
+p(`## By coin (Conservative level, full period)`);
+p();
+p(`| Strategy | Coin | Trades | Win rate | Net P&L | Avg R |`);
+p(`|---|---|---|---|---|---|`);
+for (const r of rows.filter((x) => x.levelKey === "conservative")) {
+  for (const sym of traded) {
+    const ts = r.trades.filter((t) => t.symbol === sym);
+    if (!ts.length) { p(`| ${r.strategy} | ${sym} | 0 | | | |`); continue; }
+    const pnl = ts.reduce((a, t) => a + t.pnl, 0);
+    const wr = ts.filter((t) => t.pnl > 0).length / ts.length;
+    p(`| ${r.strategy} | ${sym} | ${ts.length} | ${pct(wr, 0)} | ${money(pnl)} | ${num(ts.reduce((a, t) => a + t.r, 0) / ts.length)} |`);
+  }
+}
+p();
 p(`## Notes`);
 p();
 for (const r of rows) {
   const caps = r.events.filter((e) => e.type === "daily loss cap").length;
   const notes = [
     r.m.skippedMinSize ? `${r.m.skippedMinSize} entries skipped (below BloFin's minimum order size)` : "",
+    r.m.missedLimits ? `${r.m.missedLimits} limit entries never filled` : "",
     r.m.liquidations ? `${r.m.liquidations} liquidation(s)` : "",
     caps ? `daily loss cap hit ${caps} time(s)` : "",
     ...r.events.filter((e) => e.type === "kill switch").map((e) => `kill switch on ${day(e.time)}, no trading after`),

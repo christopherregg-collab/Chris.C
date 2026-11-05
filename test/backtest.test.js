@@ -5,7 +5,7 @@ import { createLadder } from "../lib/backtest/ladder.js";
 import { runBacktest, signalAt } from "../lib/backtest/engine.js";
 import { summarize, monteCarlo, maxDrawdown } from "../lib/backtest/stats.js";
 import { syntheticMarket } from "../lib/backtest/synthetic.js";
-import { parseCandle, fetchCandles, fetchSpecs, fetchFunding } from "../lib/backtest/blofin-data.js";
+import { parseCandle, fetchCandles, fetchSpecs, fetchFunding, barLabel } from "../lib/backtest/blofin-data.js";
 import { COSTS, LADDER, LEVELS, LIMITS, STRATEGIES, DEFAULT_SPECS } from "../lib/backtest/config.js";
 
 const HOUR = 3_600_000;
@@ -281,4 +281,43 @@ test("fetchSpecs converts contracts to base units", async () => {
   near(specs["BTC-USDT"].qtyStep, 0.0001);
   near(specs["BTC-USDT"].minQty, 0.0001);
   assert.equal(specs["DOGE-USDT"], undefined);
+});
+
+// --- limit entries, mixed histories, candle lengths --------------------------
+
+test("a limit entry fills at the signal close when price comes back, with maker fee and no slippage", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [105.5, 107, 104, 106], ...flat(3, 106)];
+  const strategy = { ...TEST_STRATEGY, entry: { type: "limit", waitBars: 1 } };
+  const costs = { ...NO_COSTS, makerFee: 0.001, takerFee: 0.01, slippage: 0.01 };
+  const r = bt(rows, { strategy, costs });
+  const t = r.trades[0];
+  near(t.entryPrice, 105, 1e-9);
+  assert.equal(r.missedLimits, 0);
+});
+
+test("a limit entry that price never comes back to is cancelled", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [107, 110, 106, 109], [109, 112, 108, 111], ...flat(3, 111)];
+  const strategy = { ...TEST_STRATEGY, entry: { type: "limit", waitBars: 1 } };
+  const r = bt(rows, { strategy });
+  assert.equal(r.missedLimits, 1);
+  // The next candle is a new breakout, so a fresh order at its close (111) fills later.
+  assert.ok(r.trades.every((t) => t.entryPrice > 105));
+});
+
+test("a coin whose history starts later joins the test when its data begins", () => {
+  const strategy = { ...TEST_STRATEGY, symbols: ["X", "Y"] };
+  const x = bars([...flat(60), [100, 106, 100, 105], [106, 107, 105, 106], ...flat(3, 106)]);
+  const y = bars([...flat(30, 50), [50, 56, 50, 55], [56, 57, 55, 56], ...flat(3, 56)], T0 + 30 * HOUR);
+  const r = runBacktest({
+    strategy, level: LEVEL, ladder: LADDER, limits: LIM, costs: NO_COSTS,
+    specs: { X: SPECS.X, Y: SPECS.X }, data: { X: x, Y: y }, startEquity: 1000,
+  });
+  assert.deepEqual(r.trades.map((t) => t.symbol).sort(), ["X", "Y"]);
+  assert.equal(r.start, T0);
+});
+
+test("barLabel maps candle lengths to BloFin's names", () => {
+  assert.equal(barLabel(HOUR), "1H");
+  assert.equal(barLabel(4 * HOUR), "4H");
+  assert.throws(() => barLabel(7));
 });

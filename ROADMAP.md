@@ -47,10 +47,12 @@ Goal: replace the demo data with the real account, without any ability to trade 
 
 Goal: know whether the signals would actually have made money before acting on them.
 
-- **Momentum backtester (built, see BACKTEST.md).** Core Momentum and Big Swing on BloFin hourly
-  data, at three aggression levels with a win-streak risk ladder, fees, slippage, funding,
-  liquidation, Monte Carlo risk of ruin and an in-sample/out-of-sample check. Next: run it on real
-  BloFin data and choose a level from the results.
+- **Momentum backtester (built, see BACKTEST.md).** Core Momentum and Big Swing on BloFin 4h
+  data for six coins since 2023, at three aggression levels with a win-streak risk ladder, limit
+  entries, fees, slippage, funding, liquidation, Monte Carlo risk of ruin and an
+  in-sample/out-of-sample check. First results (Nov 2026): Core Momentum has no edge; Big Swing's
+  longs do (profit factor ~1.9 over 165 trades) but its shorts lose, and it is uneven year to year.
+  Neither is ready for real money.
 - **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.
