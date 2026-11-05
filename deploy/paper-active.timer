@@ -1,0 +1,10 @@
+[Unit]
+Description=Run paper-active.service every 5 minutes
+
+[Timer]
+OnBootSec=4min
+OnUnitActiveSec=5min
+Unit=paper-active.service
+
+[Install]
+WantedBy=timers.target

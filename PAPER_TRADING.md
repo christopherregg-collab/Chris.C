@@ -1,5 +1,11 @@
 # Paper trading on BloFin's demo account
 
+Two bots can paper trade side by side on the demo account: **Big Swing** (below) and **Active
+Swing** (1h breakouts on 11 alts, $100 pot). Start Active Swing with `bash deploy/paper-active.sh`
+on the server, stop it with `bash deploy/paper-active.sh stop`; it shows as Strategy 3 on the
+dashboard, and `node scripts/paper-trader.js --active --status` shows its state. Each bot skips a
+coin that already has a position or order it didn't place, so they never merge positions.
+
 The paper trader runs **Big Swing** (long-only, Conservative level, a $60 pot) on BloFin's demo
 account with the exact rules from the backtest. It runs every 5 minutes on the server and acts
 when a 4h candle closes. The goal is to compare real fills with the backtest before any real

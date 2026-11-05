@@ -6,6 +6,7 @@ Tests the bot's two live strategies on BloFin's own history before any real mone
 | --- | --- | --- | --- |
 | 1 | **Core Momentum** | $240 | Daily, long-only: hold a coin while it's above its price 30 days ago, sized by volatility. Not ready: see ROADMAP.md |
 | 2 | **Big Swing** | $60 | 4h, long-only: only the strongest breakouts (strong ADX, volume spike), and adds to winners |
+| 3 | **Active Swing** | $100 | 1h, long-only: the same breakout rules on 11 volatile alts, no adds, about 3–4 trades a week |
 | 3, 4 | Shadow | $0 | Reserved for paper-testing new versions against the live ones |
 
 Both trade BTC, ETH, SOL, XRP, BNB and DOGE USDT perpetuals (`SYMBOLS` in the config). Each strategy

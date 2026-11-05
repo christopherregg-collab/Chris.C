@@ -70,6 +70,15 @@ Goal: know whether the signals would actually have made money before acting on t
   positive) against +0.84R on the original six. The edge is real but much thinner away from the
   large caps, so expect paper results below the six-coin backtest. The 21 are watch-only, in the
   dashboard scanner, which now shows Big Swing setups and 30-day momentum from BloFin 4h candles.
+- **Active Swing, a faster strategy (Nov 2026).** Goal: more trades. 1h mean reversion (buy sharp
+  dips, sell at the average) lost money in every variant, even with zero costs. 1h breakouts on 11
+  volatile alts (XRP, ADA, SOL, DOGE, SUI, LINK, AVAX, PEPE, XLM, INJ, BNB) with Big Swing's filters
+  but no adding to winners made about 0.5 trades a day; walk-forward +123% to +147% (Oct 2024 to
+  Nov 2026) on all 7 start dates tested, worst drop 19-24%, 8 of 11 coins positive, the recent
+  30% better than the older 70%, positive on BTC+ETH too. Conservative level only: Aggressive and
+  Max hit the kill switch. 3-5 trades a day wasn't achievable profitably: looser versions that
+  trade more all lost after costs. Paper trading on demo next to Big Swing; each bot skips a coin
+  the other already holds.
 - **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.

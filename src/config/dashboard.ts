@@ -33,7 +33,13 @@ export const defaultStrategies: Record<SlotId, StrategyDisplayConfig> = {
     symbols: ["BTC", "ETH", "SOL", "XRP", "BNB", "DOGE"],
     notes: "Runs every 5 minutes on the server (scripts/paper-trader.js). Conservative level, $60 pot. Paper P&L doesn't count toward the real daily loss cap.",
   },
-  lower_2: empty(),
+  lower_2: {
+    name: "Active Swing (paper)",
+    description: "Long-only 1h breakouts on 11 volatile alts in 4h and daily uptrends. About 3-4 trades a week. Paper trading on the BloFin demo account.",
+    timeframe: "1h",
+    symbols: ["XRP", "ADA", "SOL", "DOGE", "SUI", "LINK", "AVAX", "PEPE", "XLM", "INJ", "BNB"],
+    notes: "Runs every 5 minutes on the server (scripts/paper-trader.js --active). Conservative level, $100 pot. Skips a coin Big Swing is already holding.",
+  },
   lower_3: empty(),
 };
 

@@ -7,21 +7,23 @@
 //   node scripts/paper-trader.js --dry-run   live BloFin prices, no account, no orders: prints
 //                                            what it would do right now
 //   node scripts/paper-trader.js --status    show saved state without trading
+//   add --active to any of these             Active Swing (PAPER_ACTIVE / LIVE_ACTIVE) instead of Big Swing
 //
-// On the server a systemd timer runs one step every 5 minutes (deploy/paper-trader.timer).
-// State: data/paper/state.json. Every event: data/paper/log.jsonl.
+// On the server systemd timers run one step every 5 minutes (deploy/paper-trader.timer,
+// deploy/paper-active.timer). State: data/paper[-active]/state.json, events: log.jsonl.
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { LADDER, LEVELS, LIMITS, LIVE, PAPER, STRATEGIES } from "../lib/backtest/settings.js";
+import { LADDER, LEVELS, LIMITS, LIVE, LIVE_ACTIVE, PAPER, PAPER_ACTIVE, STRATEGIES } from "../lib/backtest/settings.js";
 import { initialState, runOnce } from "../lib/trader/trader.js";
 import { createBlofinExchange, createDryRunExchange, createTradingClient, demoCredentialsFromEnv, liveCredentialsFromEnv } from "../lib/trader/blofin-exchange.js";
 
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const live = args.has("--live");
-const CONFIG = live ? LIVE : PAPER;
-const dir = live ? process.env.LIVE_DIR || "data/live" : process.env.PAPER_DIR || "data/paper";
+const active = args.has("--active"); // Active Swing instead of Big Swing
+const CONFIG = live ? (active ? LIVE_ACTIVE : LIVE) : active ? PAPER_ACTIVE : PAPER;
+const dir = `data/${live ? "live" : "paper"}${active ? "-active" : ""}`;
 const stateFile = `${dir}/${dryRun ? "dry-run-state.json" : "state.json"}`;
 const logFile = `${dir}/${dryRun ? "dry-run-log.jsonl" : "log.jsonl"}`;
 

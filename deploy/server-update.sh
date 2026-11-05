@@ -41,12 +41,19 @@ install -m 644 deploy/paper-trader.service /etc/systemd/system/paper-trader.serv
 install -m 644 deploy/paper-trader.timer /etc/systemd/system/paper-trader.timer
 install -m 644 deploy/live-trader.service /etc/systemd/system/live-trader.service
 install -m 644 deploy/live-trader.timer /etc/systemd/system/live-trader.timer
+for unit in paper-active live-active; do
+  install -m 644 "deploy/$unit.service" "/etc/systemd/system/$unit.service"
+  install -m 644 "deploy/$unit.timer" "/etc/systemd/system/$unit.timer"
+done
 systemctl daemon-reload
 systemctl restart trading-bot
 sleep 3
 echo "Dashboard: $(systemctl is-active trading-bot)"
 if systemctl is-enabled paper-trader.timer >/dev/null 2>&1; then
   echo "Paper trader timer: $(systemctl is-active paper-trader.timer)"
+fi
+if systemctl is-enabled paper-active.timer >/dev/null 2>&1; then
+  echo "Active Swing paper timer: $(systemctl is-active paper-active.timer)"
 fi
 if systemctl is-enabled live-trader.timer >/dev/null 2>&1; then
   echo "LIVE trader timer: $(systemctl is-active live-trader.timer)"

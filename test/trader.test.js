@@ -419,3 +419,32 @@ test("closedPnl reads position history, or sums fills when the history is empty"
   // Only the opening fill so far: not closed yet.
   assert.equal(await make([], [{ instId: "BTC-USDT", ts: String(T + 1000), fillPnl: "0", fee: "0.0046" }]).closedPnl("BTC-USDT", T), null);
 });
+
+test("a bot skips a signal on a coin that already has someone else's position", async () => {
+  const strategy = { ...STRATEGIES.swing, symbols: ["BTC-USDT"], breakout: 3, adxMin: 0, volumeMult: 0, trendFilters: [], pyramid: null };
+  const flat = Array.from({ length: 80 }, (_, i) => ({ time: i * 4 * HOUR, open: 100, high: 101, low: 99, close: 100, volume: 1 }));
+  const candles = [...flat, { time: 80 * 4 * HOUR, open: 100, high: 106, low: 100, close: 105, volume: 1 }];
+  const placed = [];
+  const ex = {
+    specs: async () => ({ "BTC-USDT": SPEC }), pendingOrders: async () => [], pendingStops: async () => [],
+    positions: async () => [{ symbol: "BTC-USDT", contracts: 2, avgPrice: 100, unrealizedPnl: 0 }],
+    candles: async () => candles, setLeverage: async () => {},
+    placeLimit: async (...a) => { placed.push(a); return "1"; },
+  };
+  const events = [];
+  await runOnce({ ex, strategy, level: LEVELS.conservative, ladderRules: LADDER, limits: LIMITS, pot: 60, state: initialState(60), now: 81 * 4 * HOUR + 60_000, log: (e) => events.push(e) });
+  assert.equal(placed.length, 0);
+  assert.ok(events.some((e) => e.type.startsWith("signal skipped: coin already has")));
+});
+
+test("the dashboard shows Big Swing and Active Swing paper bots in their own slots", async () => {
+  const { buildDashboard } = await import("../api/dashboard.js");
+  const client = { get: async (path) => (path === "/api/v1/account/balance" ? { totalEquity: "100", details: [] } : []) };
+  const scanner = async () => ({ asOf: new Date(0).toISOString(), candidates: [] });
+  const st = (pot) => ({ ...initialState(pot), updatedAt: "2026-11-05T00:00:00.000Z", view: { positions: [], entering: [] }, trades: [{ sym: "ADA-USDT", side: "long", openedAt: "2026-11-01T00:00:00.000Z", closedAt: "2026-11-02T00:00:00.000Z", pnl: 1 }] });
+  const d = await buildDashboard(client, { nowMs: Date.UTC(2026, 10, 5), scanner, paper: { state: st(60), events: [] }, paperActive: { state: st(100), events: [{ time: "2026-11-01T00:00:00.000Z", type: "filled", sym: "ADA-USDT", side: "long", price: 1, stop: 0.9 }] } });
+  assert.deepEqual(d.strategies.map((s) => s.slot), ["featured", "lower_1", "lower_2"]);
+  assert.match(d.strategies[2].message, /\$100\.00 pot/);
+  assert.deepEqual([...new Set(d.trades.items.map((t) => t.slot))].sort(), ["lower_1", "lower_2"]);
+  assert.match(d.events[0].text, /Active Swing \(paper\)/);
+});

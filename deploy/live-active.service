@@ -1,0 +1,12 @@
+[Unit]
+Description=LIVE trader (Active Swing): one step on the real BloFin account (real money)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=bot
+WorkingDirectory=/opt/trading-bot
+EnvironmentFile=/opt/trading-bot/.env
+ExecStart=/usr/bin/env node --dns-result-order=ipv4first scripts/paper-trader.js --live --active
+TimeoutStartSec=240

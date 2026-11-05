@@ -11,10 +11,12 @@ const i = process.argv.indexOf("--days");
 const days = i > -1 ? Number(process.argv[i + 1]) : 5 * 365;
 const dir = "data/blofin";
 const strategies = Object.values(STRATEGIES);
-const symbols = [...new Set(strategies.flatMap((s) => s.symbols))];
 const barLengths = [...new Set(strategies.map((s) => s.barMs))];
 
 let specs;
-for (const barMs of barLengths) specs = await downloadAll({ symbols, days, dir, barMs });
+for (const barMs of barLengths) {
+  const coins = [...new Set(strategies.filter((s) => s.barMs === barMs).flatMap((s) => s.symbols))];
+  specs = await downloadAll({ symbols: coins, days, dir, barMs });
+}
 console.log("Order size rules:", specs);
 console.log(`Done. Data is in ${dir}/. Now run: npm run backtest`);

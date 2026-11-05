@@ -13,8 +13,8 @@ import { getScanner } from "../server/scanner.js";
 import { getSetupScanner } from "../server/setup-scanner.js";
 
 const defaultScanner = (nowMs) => (process.env.SCANNER_MODE === "indicators" ? getScanner(nowMs) : getSetupScanner(nowMs));
-import { paperDashboard, readPaper } from "../lib/trader/dashboard-view.js";
-import { PAPER } from "../lib/backtest/settings.js";
+import { ACTIVE_SLOT, paperDashboard, readPaper } from "../lib/trader/dashboard-view.js";
+import { PAPER, PAPER_ACTIVE } from "../lib/backtest/settings.js";
 
 const DAY = 86_400_000;
 /** Snapshots are hourly; older than this means the recorder has stopped. */
@@ -22,7 +22,7 @@ export const SNAPSHOT_MAX_AGE_MS = 70 * 60_000;
 const CACHE_MS = 10_000;
 let cache = { at: 0, body: null };
 
-export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [], dailyLossCap, scanner = defaultScanner, paper = null, source = { kind: "real", label: "BloFin" } } = {}) {
+export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [], dailyLossCap, scanner = defaultScanner, paper = null, paperActive = null, source = { kind: "real", label: "BloFin" } } = {}) {
   const demo = source.kind === "demo";
   const asOf = new Date(nowMs).toISOString();
   const last = snapshots[snapshots.length - 1];
@@ -46,6 +46,8 @@ export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [
   const openTrades = positions.map((p) => ({ id: `open-${p.id}`, symbol: p.symbol, side: p.side, openedAt: p.openedAt, slot: "featured", ...(demo ? { paper: true } : {}) }));
   // The paper trader (BloFin demo account) shows in Strategy 2, its trades are marked paper.
   const paperView = paperDashboard(paper, { pot: PAPER.pot });
+  const activeView = paperDashboard(paperActive, { pot: PAPER_ACTIVE.pot, slot: ACTIVE_SLOT, label: "Active Swing (paper)", what: "a 1h breakout signal" });
+  const bots = [paperView, activeView].filter(Boolean);
 
   return {
     mode: "live",
@@ -69,13 +71,13 @@ export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [
           : `No open positions on the ${source.label}.`,
         positions,
       },
-      ...(paperView ? [paperView.strategy] : []),
+      ...bots.map((b) => b.strategy),
     ],
     // In demo mode the account's own trades already are the paper trader's, so they aren't listed twice.
-    trades: { asOf, items: [...openTrades, ...closed.map((t) => ({ ...t, slot: "featured", ...(demo ? { paper: true } : {}) })), ...(demo ? [] : paperView?.trades ?? [])] },
+    trades: { asOf, items: [...openTrades, ...closed.map((t) => ({ ...t, slot: "featured", ...(demo ? { paper: true } : {}) })), ...(demo ? [] : bots.flatMap((b) => b.trades))] },
     scanner: scan,
     risk: { asOf, ...(dailyLossCap > 0 ? { dailyLossCap } : {}) },
-    events: paperView?.events ?? [],
+    events: bots.flatMap((b) => b.events),
   };
 }
 
@@ -95,6 +97,7 @@ export default async function handler(req, res) {
       snapshots: readSnapshots(account.snapshotFile),
       dailyLossCap: Number(process.env.DAILY_LOSS_CAP) || undefined,
       paper: readPaper(),
+      paperActive: readPaper("data/paper-active"),
     });
     cache = { at: nowMs, body };
     return send(res, 200, body);

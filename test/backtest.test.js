@@ -206,10 +206,14 @@ test("signals respect the higher-timeframe trend filter", () => {
 });
 
 test("the real strategies run on simulated data without errors", () => {
-  const data = syntheticMarket({ hours: 120 * 24 });
-  for (const s of Object.values(STRATEGIES)) {
+  for (const strategy of Object.values(STRATEGIES)) {
+    const s = { ...strategy, symbols: strategy.symbols.slice(0, 3) };
+    const hourly = syntheticMarket({ symbols: s.symbols, hours: 120 * 24 });
+    const data = Object.fromEntries(Object.entries(hourly).map(([sym, c]) =>
+      [sym, resample(c, s.barMs, HOUR).filter((x) => x.complete).map(({ end, complete, ...x }) => x)]));
+    const specs = Object.fromEntries(s.symbols.map((sym) => [sym, DEFAULT_SPECS[sym] ?? { qtyStep: 1e-6, minQty: 1e-6 }]));
     for (const level of Object.values(LEVELS)) {
-      const r = runBacktest({ strategy: s, level, ladder: LADDER, limits: LIMITS, costs: COSTS, specs: DEFAULT_SPECS, data, startEquity: 100 });
+      const r = runBacktest({ strategy: s, level, ladder: LADDER, limits: LIMITS, costs: COSTS, specs, data, startEquity: 100 });
       const m = summarize(r);
       assert.ok(Number.isFinite(m.endEquity) && m.endEquity >= 0);
       for (const t of r.trades) assert.ok(Number.isFinite(t.pnl));
@@ -430,4 +434,42 @@ test("funding uses the coin's real payment times, including 4-hourly ones", () =
   for (let f = t.openTime; f < t.closeTime; f += HOUR) if ((f - T0) % (2 * HOUR) === 0) payments++;
   assert.ok(payments >= 2);
   near(r.funding, t.qty * 106 * 0.001 * payments, 1e-6);
+});
+
+// --- mean reversion, take-profit, time stop ----------------------------------
+
+import { bollinger } from "../lib/backtest/ta.js";
+
+test("bollinger bands are the moving average ± width standard deviations", () => {
+  const b = bollinger([1, 3, 1, 3], 2, 2);
+  assert.equal(b.mid[0], null);
+  near(b.mid[1], 2);
+  near(b.upper[1], 4);
+  near(b.lower[1], 0);
+});
+
+const MR = {
+  ...TEST_STRATEGY, signal: "meanReversion", breakout: null, exitChannel: null, rsiPeriod: 2, rsiLow: 10,
+  bandBars: 20, bandWidth: 2, takeProfit: "mid", stopAtr: 10, trailAtr: 100, entry: { type: "limit", waitBars: 1 },
+};
+// Gentle zig-zag around 100, then a sharp two-candle drop, then a bounce.
+const zig = Array.from({ length: 40 }, (_, i) => { const c = 100 + (i % 2 ? 0.5 : -0.5); return [c, c + 0.6, c - 0.6, c]; });
+
+test("mean reversion buys a sharp dip and takes profit at the middle band with a maker fill", () => {
+  const rows = [...zig, [100, 100.2, 96, 96.5], [96.5, 96.6, 93, 93.2], [93.2, 96, 93.1, 95.8], [95.8, 101, 95.5, 100.5], ...zig.slice(0, 5)];
+  const costs = { ...NO_COSTS, makerFee: 0.0002, takerFee: 0.01, slippage: 0.01 };
+  const r = bt(rows, { strategy: MR, costs });
+  const t = r.trades[0];
+  assert.ok(t, "a trade was made");
+  assert.equal(t.side, "long");
+  assert.equal(t.reason, "target");
+  assert.ok(t.pnl > 0);
+  // Both fills were maker: fees are 0.02% of each side, far below the 1% taker rate.
+  assert.ok(r.fees < t.qty * (t.entryPrice + t.exitPrice) * 0.001);
+});
+
+test("a time stop closes a trade that hasn't bounced", () => {
+  const rows = [...zig, [100, 100.2, 96, 96.5], [96.5, 96.6, 93, 93.2], ...Array.from({ length: 10 }, () => [93, 93.4, 92.6, 93])];
+  const r = bt(rows, { strategy: { ...MR, maxBars: 3 } });
+  assert.equal(r.trades[0].reason, "time stop");
 });

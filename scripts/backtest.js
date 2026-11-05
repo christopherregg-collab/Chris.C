@@ -6,7 +6,7 @@
 //   npm run backtest                       backtest on the downloaded data
 //   npm run backtest -- --synthetic        backtest on simulated data (engine check only)
 //
-// Options: --core 240 --swing 60 (starting money), --split 0.7 (in-sample share),
+// Options: --core 240 --swing 60 --active 100 (starting money), --split 0.7 (in-sample share),
 //          --no-kill (disable the kill switch), --dir data/blofin, --out data/backtest
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -37,7 +37,7 @@ function parseArgs(argv) {
 const opt = parseArgs(process.argv.slice(2));
 const symbols = [...new Set(Object.values(STRATEGIES).flatMap((s) => s.symbols))];
 const barLengths = [...new Set(Object.values(STRATEGIES).map((s) => s.barMs))];
-const allocation = { core: Number(opt.core ?? DEFAULT_ALLOCATION.core), swing: Number(opt.swing ?? DEFAULT_ALLOCATION.swing) };
+const allocation = Object.fromEntries(Object.keys(STRATEGIES).map((k) => [k, Number(opt[k] ?? DEFAULT_ALLOCATION[k] ?? 100)]));
 const split = Number(opt.split ?? 0.7);
 const limits = { ...LIMITS, killSwitch: opt["no-kill"] ? null : LIMITS.killSwitch };
 const outDir = opt.out ?? "data/backtest";
@@ -49,23 +49,30 @@ let funding = {};
 let specs = {};
 if (opt.synthetic) {
   source = "SIMULATED data (engine check only, not a profit estimate)";
-  const hourly = syntheticMarket({ symbols: symbols.slice(0, 2) });
+  const hourly = syntheticMarket({ symbols });
   for (const ms of barLengths) {
     markets[ms] = Object.fromEntries(Object.entries(hourly).map(([sym, c]) =>
       [sym, resample(c, ms, HOUR).filter((b) => b.complete).map(({ end, complete, ...b }) => b)]));
   }
 } else {
+  // Each candle length loads only the coins of the strategies that use it.
   for (const ms of barLengths) {
-    const loaded = loadBlofin(opt.dir ?? "data/blofin", symbols, ms);
+    const coins = [...new Set(Object.values(STRATEGIES).filter((s) => s.barMs === ms).flatMap((s) => s.symbols))];
+    const loaded = loadBlofin(opt.dir ?? "data/blofin", coins, ms);
     markets[ms] = loaded.data;
-    funding = loaded.funding;
-    specs = loaded.specs;
+    funding = { ...funding, ...loaded.funding };
+    specs = { ...specs, ...loaded.specs };
   }
   source = `BloFin ${barLengths.map(barLabel).join(" and ")} candles`;
 }
-const data = markets[Math.min(...barLengths)]; // finest candles: used for dates and buy and hold
+// For dates and buy and hold: each coin's finest candles, whichever candle length has it.
+const data = {};
+for (const ms of [...barLengths].sort((a, b) => a - b)) {
+  for (const [sym, c] of Object.entries(markets[ms])) if (c?.length && !data[sym]) data[sym] = c;
+}
 const traded = symbols.filter((sym) => data[sym]?.length);
 specs = { ...DEFAULT_SPECS, ...specs };
+for (const sym of symbols) specs[sym] ??= { qtyStep: 1e-6, minQty: 1e-6 }; // simulated coins without saved rules
 
 // Coins with shorter histories join the test when their data starts.
 const first = Math.min(...traded.map((s) => data[s][0].time));
@@ -107,8 +114,8 @@ for (const key of Object.keys(STRATEGIES)) {
 }
 
 // Buy and hold each symbol, and an equal split across all of them, from `start`.
-function buyAndHold(start) {
-  return traded.map((sym) => {
+function buyAndHold(start, coins = traded) {
+  return coins.filter((sym) => data[sym]).map((sym) => {
     const c = data[sym].filter((x) => x.time >= start);
     return { symbol: sym, since: c[0].time, ret: c[c.length - 1].close / c[0].open - 1 };
   });
@@ -131,7 +138,7 @@ for (const key of Object.keys(STRATEGIES)) {
     key, strategy: s.label, result,
     wfStats: { ...summarize({ ...result, funding: 0, skippedMinSize: 0, liquidations: 0, killed: false }), rPF: scoreTrades(result.trades, 0) },
     fixedStats: { ...summarize(fixed), rPF: scoreTrades(fixed.trades, 0) },
-    hold: basket(buyAndHold(result.start)),
+    hold: basket(buyAndHold(result.start, s.symbols)),
   });
 }
 
@@ -204,7 +211,7 @@ p();
 p(`| Strategy | Coin | Trades | Win rate | Net P&L | Avg R |`);
 p(`|---|---|---|---|---|---|`);
 for (const r of rows.filter((x) => x.levelKey === "conservative")) {
-  for (const sym of traded) {
+  for (const sym of STRATEGIES[r.key].symbols) {
     const ts = r.trades.filter((t) => t.symbol === sym);
     if (!ts.length) { p(`| ${r.strategy} | ${sym} | 0 | | | |`); continue; }
     const pnl = ts.reduce((a, t) => a + t.pnl, 0);
