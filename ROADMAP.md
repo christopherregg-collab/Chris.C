@@ -53,6 +53,11 @@ Goal: know whether the signals would actually have made money before acting on t
   in-sample/out-of-sample check. First results (Nov 2026): Core Momentum has no edge; Big Swing's
   longs do (profit factor ~1.9 over 165 trades) but its shorts lose, and it is uneven year to year.
   Neither is ready for real money.
+- **Walk-forward test, Core Trend, long-only Big Swing (Nov 2026).** In the rolling walk-forward
+  test (Mar 2024 to Nov 2026, settings picked each quarter from the previous year only), long-only
+  Big Swing returned +90% with a 21% max drawdown and PF (R) 1.65, against +14% for an equal split
+  of the six coins. Core Trend (daily trend-holder) was flat, and lost on the most recent data.
+  Big Swing moves to paper trading (PAPER_TRADING.md); Core Trend needs more work.
 - **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.

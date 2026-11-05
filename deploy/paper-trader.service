@@ -1,0 +1,12 @@
+[Unit]
+Description=Paper trader: one step on the BloFin demo account
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=bot
+WorkingDirectory=/opt/trading-bot
+EnvironmentFile=/opt/trading-bot/.env
+ExecStart=/usr/bin/env node --dns-result-order=ipv4first scripts/paper-trader.js
+TimeoutStartSec=240

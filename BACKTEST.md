@@ -1,18 +1,21 @@
-# Momentum backtester
+# Backtester
 
 Tests the bot's two live strategies on BloFin's own history before any real money is used:
 
 | Slot | Strategy | Money | What it does |
 | --- | --- | --- | --- |
-| 1 | **Core Momentum** | $240 | 4h breakouts in the direction of the daily trend |
-| 2 | **Big Swing** | $60 | Only the strongest 4h breakouts (strong ADX, volume spike), and adds to winners |
+| 1 | **Core Trend** | $240 | Daily, long-only: hold while the close is above a rising EMA 100 |
+| 2 | **Big Swing** | $60 | 4h, long-only: only the strongest breakouts (strong ADX, volume spike), and adds to winners |
 | 3, 4 | Shadow | $0 | Reserved for paper-testing new versions against the live ones |
 
 Both trade BTC, ETH, SOL, XRP, BNB and DOGE USDT perpetuals (`SYMBOLS` in the config). Each strategy
 is run at three aggression levels, so the choice of level is made from the numbers.
 
-Why 4h: on 1h candles the signal made money before costs but traded ~300 times a year, and fees
-plus slippage turned it into a loss. 4h candles and limit-order entries cut costs sharply.
+How we got here (Nov 2026):
+- On 1h candles, breakouts made money before costs but traded about 300 times a year, and fees
+  plus slippage turned that into a loss. Moving to 4h candles with limit-order entries cut costs sharply.
+- On 4h, a breakout version of Core had no edge, and Big Swing's shorts lost money while its longs
+  made it. So Core became a daily trend-holder, and both strategies are long-only.
 
 ## Run it
 
@@ -20,7 +23,7 @@ BloFin's API is reachable from the Hetzner server (and from your own computer), 
 cloud coding sandbox.
 
 ```sh
-npm run backtest:fetch          # download up to 5 years of 4h candles (BloFin has from Jan 2023), funding and order-size rules
+npm run backtest:fetch          # download up to 5 years of candles (BloFin has from Jan 2023), funding and order-size rules
 npm run backtest                # run everything; writes data/backtest/report.md and report.json
 ```
 
@@ -40,22 +43,27 @@ its numbers say nothing about real profit.
 
 ## The rules being tested
 
-**Entry.** On the close of a 4h candle: the close breaks the previous 20-candle high (long) or low
-(short), the daily close is above its EMA 50 for longs (below for shorts), ADX(14) is above the
-minimum, and volume is above its 20-candle average times the multiplier. A limit order is placed at
-that close. It fills only if the next candle trades back to it (maker fee, no slippage); otherwise
+**Big Swing entry.** On the close of a 4h candle: the close breaks the previous 20-candle high,
+the daily close is above its EMA 50, ADX(14) is at least 30, and volume is at least 1.5× its
+20-candle average.
+
+**Core Trend entry.** On the close of a daily candle: the close is above EMA 100, and the EMA is
+higher than 5 days ago.
+
+**Both.** A limit order is placed at the signal candle's close. It fills only if the next candle trades back to it (maker fee, no slippage); otherwise
 it is cancelled and counted as a missed entry. Set `entry.type` to `"market"` to fill at the next open.
 
-| | Core Momentum | Big Swing |
+| | Core Trend | Big Swing |
 | --- | --- | --- |
-| Trend filter | daily | daily |
-| ADX minimum | 20 | 30 |
-| Volume | above average | 1.5× average |
+| Candles | daily | 4h |
+| Initial stop | 3 ATR | 2 ATR |
+| Trailing stop | 4 ATR behind the best price | 3 ATR behind the best price |
+| Exit signal | close below the EMA | close below the 10-candle low |
 | Adds to winners | no | up to 3 times, every 1 ATR of profit |
+| Max positions | 6 (one per coin) | 3 |
 
-**Exit.** A stop 2 ATR away, placed at entry. A trailing stop 3 ATR behind the best price.
-A close beyond the opposite 10-bar channel. When Big Swing adds, its stop moves to 2 ATR behind
-the latest add, so a failed run loses about one normal loss.
+When Big Swing adds, its stop moves to 2 ATR behind the latest add, so a failed run loses about
+one normal loss.
 
 **Position size.** `risk % × equity ÷ stop distance`, then cut down to the leverage cap, then
 rounded down to BloFin's order step. Orders below BloFin's minimum size are skipped and counted.
@@ -82,6 +90,9 @@ All of these are settings in `lib/backtest/settings.js`.
 
 ## Reading the report
 
+- **Walk-forward test**: the honest one. Each quarter, the settings are chosen from the
+  strategy's `walkForward.grid` using only the previous year, then traded on the next quarter.
+  Only those unseen quarters count. The table also shows which settings were picked each time.
 - **Results**: what each strategy and level would have done with the real rules, kill switch included.
 - **Risk of ruin**: 5,000 simulated years made by shuffling the trades, with the risk ladder
   replayed and the kill switch off. It shows how likely each level is to lose 25%, 50% or 90%.
@@ -103,6 +114,7 @@ rather than going live.
 | `lib/backtest/ladder.js` | Win-streak risk ladder |
 | `lib/backtest/ta.js` | ATR, ADX, Donchian channels, higher-timeframe trend |
 | `lib/backtest/stats.js` | Metrics and Monte Carlo |
+| `lib/backtest/walkforward.js` | Rolling walk-forward test |
 | `lib/backtest/blofin-data.js` | BloFin public data download and loading |
 | `lib/backtest/synthetic.js` | Simulated prices for engine checks |
 | `scripts/backtest.js`, `scripts/fetch-blofin.js` | Command-line entry points |
