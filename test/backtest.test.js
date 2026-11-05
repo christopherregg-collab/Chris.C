@@ -377,3 +377,45 @@ test("walkForward only trades windows after the training period and carries equi
   for (let i = 1; i < r.windows.length; i++) assert.equal(r.windows[i].startEquity, r.windows[i - 1].endEquity);
   assert.equal(r.endEquity, r.windows.at(-1).endEquity);
 });
+
+// --- momentum signal and volatility sizing -----------------------------------
+
+import { sizeQty } from "../lib/backtest/engine.js";
+import { realizedVol } from "../lib/backtest/ta.js";
+
+test("realizedVol annualizes the standard deviation of log returns", () => {
+  const c = [100, 110, 100, 110, 100].map((close, i) => ({ time: i, open: close, high: close, low: close, close, volume: 1 }));
+  const v = realizedVol(c, 2, 365);
+  assert.equal(v[1], null);
+  // two returns +ln(1.1), -ln(1.1): mean 0, std ln(1.1)
+  near(v[2], Math.log(1.1) * Math.sqrt(365), 1e-9);
+});
+
+test("volatility sizing gives calmer coins bigger positions and follows the risk ladder", () => {
+  const s = { symbols: ["A", "B"], sizing: { type: "volatility", targetVol: 0.6, maxWeight: 0.5 } };
+  const calm = sizeQty(s, { equity: 1000, riskPct: 0.01, price: 10, vol: 0.3 });
+  const wild = sizeQty(s, { equity: 1000, riskPct: 0.01, price: 10, vol: 1.2 });
+  near(calm, (1000 * 0.5) / 10, 1e-9, "capped at maxWeight");
+  near(wild, (1000 * (0.6 / 1.2) / 2) / 10, 1e-9);
+  near(sizeQty(s, { equity: 1000, riskPct: 0.02, price: 10, vol: 1.2 }), wild * 2, 1e-9);
+  assert.equal(sizeQty(s, { equity: 1000, riskPct: 0.01, price: 10, vol: null }), 0);
+  near(sizeQty({}, { equity: 1000, riskPct: 0.01, price: 10, stopDist: 2 }), 5, 1e-9, "risk sizing unchanged");
+});
+
+test("momentum holds while price is above its level `lookback` candles ago", () => {
+  const strategy = { ...TEST_STRATEGY, signal: "momentum", lookback: 10, breakout: null, exitChannel: null, sides: "long", trailAtr: 100, stopAtr: 50 };
+  const up = Array.from({ length: 40 }, (_, i) => [100 + i, 101 + i, 99 + i, 100 + i]);
+  const down = Array.from({ length: 30 }, (_, i) => [139 - i * 2, 140 - i * 2, 137 - i * 2, 138 - i * 2]);
+  const r = bt([...up, ...down], { strategy });
+  assert.ok(r.trades.length >= 1);
+  assert.equal(r.trades[0].reason, "trend lost");
+  assert.ok(r.trades.every((t) => t.side === "long"));
+});
+
+test("a strategy can turn off the daily loss cap", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], [100, 101, 99, 100], ...flat(3, 100)];
+  const capped = bt(rows, { level: { ...LEVEL, baseRisk: 0.2 }, limits: { ...LIM, dailyLossCap: 0.05 } });
+  const uncapped = bt(rows, { level: { ...LEVEL, baseRisk: 0.2 }, limits: { ...LIM, dailyLossCap: 0.05 }, strategy: { ...TEST_STRATEGY, dailyLossCap: null } });
+  assert.ok(capped.events.some((e) => e.type === "daily loss cap"));
+  assert.ok(!uncapped.events.some((e) => e.type === "daily loss cap"));
+});

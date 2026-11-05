@@ -58,6 +58,13 @@ Goal: know whether the signals would actually have made money before acting on t
   Big Swing returned +90% with a 21% max drawdown and PF (R) 1.65, against +14% for an equal split
   of the six coins. Core Trend (daily trend-holder) was flat, and lost on the most recent data.
   Big Swing moves to paper trading (PAPER_TRADING.md); Core Trend needs more work.
+- **Core rework and robustness check (Nov 2026).** Volatility-based sizing raised the trend-holder's
+  exposure but not its results (walk-forward -9% to -12%). Time-series momentum (hold while above
+  the price N days ago) did better: fixed 20-30 day lookbacks made +19% to +34% from Mar 2024 with
+  ~36% max drawdown, against +15% and 63% for buy and hold. But its walk-forward result swings from
+  -13% to +26% depending on which day the test starts (positive on 8 of 14 start dates), so Core
+  is still not ready. Big Swing's walk-forward stayed between +65% and +87% on all 14 start dates:
+  its edge doesn't depend on the start date.
 - **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.

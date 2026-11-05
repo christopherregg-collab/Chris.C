@@ -71,7 +71,8 @@ specs = { ...DEFAULT_SPECS, ...specs };
 const first = Math.min(...traded.map((s) => data[s][0].time));
 const last = Math.max(...traded.map((s) => data[s][data[s].length - 1].time));
 // The daily-trend filter needs ~50 days of history before it can say anything; skip that warm-up.
-const from = first + 55 * DAY;
+// Start at a UTC midnight so daily candles and test windows line up.
+const from = Math.ceil((first + 55 * DAY) / DAY) * DAY;
 if (from >= last) throw new Error("not enough data: need more than 55 days of candles");
 const cut = from + Math.floor(((last - from) * split) / HOUR) * HOUR;
 

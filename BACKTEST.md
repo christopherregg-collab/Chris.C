@@ -4,7 +4,7 @@ Tests the bot's two live strategies on BloFin's own history before any real mone
 
 | Slot | Strategy | Money | What it does |
 | --- | --- | --- | --- |
-| 1 | **Core Trend** | $240 | Daily, long-only: hold while the close is above a rising EMA 100 |
+| 1 | **Core Momentum** | $240 | Daily, long-only: hold a coin while it's above its price 30 days ago, sized by volatility. Not ready: see ROADMAP.md |
 | 2 | **Big Swing** | $60 | 4h, long-only: only the strongest breakouts (strong ADX, volume spike), and adds to winners |
 | 3, 4 | Shadow | $0 | Reserved for paper-testing new versions against the live ones |
 
@@ -47,18 +47,21 @@ its numbers say nothing about real profit.
 the daily close is above its EMA 50, ADX(14) is at least 30, and volume is at least 1.5× its
 20-candle average.
 
-**Core Trend entry.** On the close of a daily candle: the close is above EMA 100, and the EMA is
-higher than 5 days ago.
+**Core Momentum entry.** On the close of a daily candle: the close is above the close 30 days
+earlier. It exits when that's no longer true. Position size: each coin gets equity ÷ 6, scaled by
+60% ÷ the coin's 30-day annualized volatility (at most half the account per coin), times the risk
+ladder (1% risk = 1×). It has no daily loss cap of its own, because a holder rides through −5% days.
 
 **Both.** A limit order is placed at the signal candle's close. It fills only if the next candle trades back to it (maker fee, no slippage); otherwise
 it is cancelled and counted as a missed entry. Set `entry.type` to `"market"` to fill at the next open.
 
-| | Core Trend | Big Swing |
+| | Core Momentum | Big Swing |
 | --- | --- | --- |
 | Candles | daily | 4h |
-| Initial stop | 3 ATR | 2 ATR |
-| Trailing stop | 4 ATR behind the best price | 3 ATR behind the best price |
-| Exit signal | close below the EMA | close below the 10-candle low |
+| Position size | by volatility | by risk to the stop |
+| Initial stop | 3 ATR (protective) | 2 ATR |
+| Trailing stop | none | 3 ATR behind the best price |
+| Exit signal | close below the close 30 days earlier | close below the 10-candle low |
 | Adds to winners | no | up to 3 times, every 1 ATR of profit |
 | Max positions | 6 (one per coin) | 3 |
 
