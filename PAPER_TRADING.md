@@ -56,7 +56,8 @@ without keys or orders.
    - It adds to winners, up to 3 times.
    - It places a limit buy at the close when there's a signal.
 
-It uses isolated margin and sets leverage to the level's cap. It only manages positions it opened
+It uses isolated margin in net position mode (switching the demo account to that on the first run
+if nothing is open) and sets leverage to the level's cap. It only manages positions it opened
 itself: anything else on the account is reported once and left alone.
 
 ## Settings
@@ -66,7 +67,12 @@ the latest walk-forward window. Re-check those against the backtest report each 
 
 ## If BloFin rejects an order
 
-The order format follows BloFin's v1 REST API, but the docs couldn't be checked when this was
-written. A rejected call shows up in `journalctl` with BloFin's error code and the call that
-failed. Paste that error into a Claude session to fix it. All BloFin-specific code is in
-`lib/trader/blofin-exchange.js`.
+The request paths and fields were checked against two independent BloFin clients: ccxt and the
+community `blofin` Python SDK. BloFin's own docs site blocks automated readers, so it wasn't read
+directly. Two details rest only on BloFin's documented conventions, not on either client:
+`size: "-1"` to make a stop close the whole position, and the demo host serving public market data.
+
+On each run the trader first checks that the demo account uses isolated margin and net position
+mode, and switches it while nothing is open. A rejected call shows up in `journalctl` with BloFin's
+error code and the call that failed. Paste that error into a Claude session to fix it. All
+BloFin-specific code is in `lib/trader/blofin-exchange.js`.

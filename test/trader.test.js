@@ -212,3 +212,51 @@ test("demo client signs POST bodies and only talks to the demo host", async () =
   const { sign } = await import("../server/blofin.js");
   assert.equal(seen.init.headers["ACCESS-SIGN"], sign("s", "/api/v1/trade/order" + "POST" + "1700000000000" + "n1" + seen.init.body));
 });
+
+test("prepareAccount switches a fresh demo account to isolated margin and net mode", async () => {
+  const { createBlofinExchange } = await import("../lib/trader/blofin-exchange.js");
+  const posts = [];
+  const client = {
+    get: async (path) => ({
+      "/api/v1/account/margin-mode": { marginMode: "cross" },
+      "/api/v1/account/position-mode": { positionMode: "long_short_mode" },
+      "/api/v1/account/positions": [],
+      "/api/v1/trade/orders-pending": [],
+    })[path],
+    post: async (path, body) => { posts.push([path, body]); return {}; },
+  };
+  await createBlofinExchange(client, { publicGet: async () => [] }).prepareAccount();
+  assert.deepEqual(posts, [
+    ["/api/v1/account/set-margin-mode", { marginMode: "isolated" }],
+    ["/api/v1/account/set-position-mode", { positionMode: "net_mode" }],
+  ]);
+});
+
+test("prepareAccount refuses to switch modes while positions are open", async () => {
+  const { createBlofinExchange } = await import("../lib/trader/blofin-exchange.js");
+  const client = {
+    get: async (path) => ({
+      "/api/v1/account/margin-mode": { marginMode: "cross" },
+      "/api/v1/account/position-mode": { positionMode: "net_mode" },
+      "/api/v1/account/positions": [{ instId: "BTC-USDT", positions: "1", averagePrice: "1", unrealizedPnl: "0" }],
+      "/api/v1/trade/orders-pending": [],
+    })[path],
+    post: async () => { throw new Error("must not post"); },
+  };
+  await assert.rejects(createBlofinExchange(client, { publicGet: async () => [] }).prepareAccount(), /Close all positions/);
+});
+
+test("order requests use the field names BloFin's clients use", async () => {
+  const { createBlofinExchange } = await import("../lib/trader/blofin-exchange.js");
+  const posts = [];
+  const client = { get: async () => [], post: async (path, body) => { posts.push([path, body]); return path.endsWith("order-tpsl") ? { tpslId: "77" } : [{ orderId: "5" }]; } };
+  const ex = createBlofinExchange(client, { publicGet: async () => [] });
+  assert.equal(await ex.placeLimit("BTC-USDT", "buy", 100.5, 2), "5");
+  assert.equal(await ex.placeStop("BTC-USDT", "sell", 95), "77");
+  await ex.cancelStop("BTC-USDT", "77");
+  const [order, stop, cancel] = posts;
+  assert.equal(order[0], "/api/v1/trade/order");
+  assert.deepEqual({ ...order[1], clientOrderId: undefined }, { instId: "BTC-USDT", marginMode: "isolated", positionSide: "net", side: "buy", orderType: "limit", price: "100.5", size: "2", clientOrderId: undefined });
+  assert.deepEqual({ ...stop[1], clientOrderId: undefined }, { instId: "BTC-USDT", marginMode: "isolated", positionSide: "net", side: "sell", slTriggerPrice: "95", slOrderPrice: "-1", size: "-1", reduceOnly: "true", clientOrderId: undefined });
+  assert.deepEqual(cancel, ["/api/v1/trade/cancel-tpsl", [{ instId: "BTC-USDT", tpslId: "77" }]]);
+});
