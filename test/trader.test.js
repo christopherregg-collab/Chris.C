@@ -379,3 +379,20 @@ test("trading clients use the demo host unless explicitly live", async () => {
   assert.ok(urls[1].startsWith(DEMO_BASE), "only the boolean true means live");
   assert.ok(urls[2].startsWith(BLOFIN_BASE + "/"));
 });
+
+test("a rejected entry order is logged and doesn't stop the run", async () => {
+  const strategy = { ...STRATEGIES.swing, symbols: ["BTC-USDT"], breakout: 3, adxMin: 0, volumeMult: 0, trendFilters: [], pyramid: null };
+  const flat = Array.from({ length: 80 }, (_, i) => ({ time: i * 4 * HOUR, open: 100, high: 101, low: 99, close: 100, volume: 1 }));
+  const candles = [...flat, { time: 80 * 4 * HOUR, open: 100, high: 106, low: 100, close: 105, volume: 1 }];
+  const ex = {
+    specs: async () => ({ "BTC-USDT": SPEC }), positions: async () => [], pendingOrders: async () => [], pendingStops: async () => [],
+    candles: async () => candles, setLeverage: async () => {},
+    placeLimit: async () => { throw new Error("BloFin demo POST /api/v1/trade/order: All operations failed (code 1): Insufficient margin in account"); },
+  };
+  const events = [];
+  const { state } = await runOnce({ ex, strategy, level: LEVELS.conservative, ladderRules: LADDER, limits: LIMITS, pot: 60, state: initialState(60), now: 81 * 4 * HOUR + 60_000, log: (e) => events.push(e) });
+  const rejected = events.find((e) => e.type === "entry order rejected");
+  assert.ok(rejected);
+  assert.match(rejected.error, /Insufficient margin/);
+  assert.equal(state.coins["BTC-USDT"].status, "flat");
+});
