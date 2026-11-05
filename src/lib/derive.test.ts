@@ -152,3 +152,12 @@ describe("demo fixtures", () => {
     expect(riskUsage(d.risk, d.trades.items, NOW, "UTC").usage).toBeNull();
   });
 });
+
+describe("paper trades", () => {
+  it("are not counted against the real daily loss cap", () => {
+    const now = Date.UTC(2026, 10, 5, 12);
+    const t = (pnl: number, paper?: boolean) => ({ id: String(pnl), symbol: "X", side: "long" as const, openedAt: new Date(now - 7200_000).toISOString(), closedAt: new Date(now - 3600_000).toISOString(), realizedPnl: pnl, paper });
+    const r = riskUsage({ asOf: new Date(now).toISOString(), dailyLossCap: 100 }, [t(-10), t(-50, true)], now, "UTC");
+    expect(r.lossUsed).toBe(10);
+  });
+});

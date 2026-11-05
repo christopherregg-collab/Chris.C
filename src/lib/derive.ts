@@ -243,12 +243,12 @@ export const RISK_DANGER = 0.8;
  * "Today" is the current calendar day in the display time zone; the cap resets
  * at its midnight. Net realized loss is the negative of the summed realized
  * P&L of trades closed today, floored at zero, so a profitable day uses none
- * of the cap. Unrealized P&L is not counted.
+ * of the cap. Unrealized P&L and paper (demo-account) trades are not counted.
  */
 export function riskUsage(risk: RiskData, trades: Trade[], nowMs: number, tz: string) {
   const dayStart = startOfDay(nowMs, tz);
   const realizedToday = trades
-    .filter((t) => t.closedAt && t.realizedPnl !== undefined && ms(t.closedAt) >= dayStart && ms(t.closedAt) <= nowMs)
+    .filter((t) => !t.paper && t.closedAt && t.realizedPnl !== undefined && ms(t.closedAt) >= dayStart && ms(t.closedAt) <= nowMs)
     .reduce((s, t) => s + t.realizedPnl!, 0);
   const lossUsed = Math.max(0, -realizedToday);
   const cap = risk.dailyLossCap && risk.dailyLossCap > 0 ? risk.dailyLossCap : null;

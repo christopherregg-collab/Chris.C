@@ -89,6 +89,8 @@ export interface Trade {
   realizedPnl?: number;
   /** Amount at risk at entry (entry-to-stop distance × size). Needed for R multiples. */
   initialRisk?: number;
+  /** A paper trade on the exchange's demo account: shown, but not counted against real-money limits. */
+  paper?: boolean;
 }
 
 export interface TradesData {

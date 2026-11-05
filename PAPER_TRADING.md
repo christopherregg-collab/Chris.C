@@ -28,6 +28,21 @@ It can only reach BloFin's **demo** environment: the address is fixed in
 
 To stop: `deploy/setup-paper-trader.sh stop`. The state and log are kept.
 
+## On the dashboard
+
+The paper trader shows in the **Strategy 2** card ("Big Swing (paper)"): status, open positions
+with their stops, and a summary of its equity. Its trades appear in the Trades card marked as paper,
+and its fills, exits and stop changes appear under notifications. Paper P&L is never counted
+against the real account's daily loss cap.
+
+To update the server (dashboard, backtester and paper trader) without a local computer, run in the
+Hetzner console:
+
+```
+curl -fsSL -o update.sh raw.githubusercontent.com/christopherregg-collab/Chris.C/claude/inspiring-keller-p0ukdo/deploy/server-update.sh
+bash update.sh
+```
+
 ## Check on it
 
 On the server (`ssh` in, then `cd /opt/trading-bot`):

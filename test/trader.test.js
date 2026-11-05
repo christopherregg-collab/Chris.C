@@ -260,3 +260,42 @@ test("order requests use the field names BloFin's clients use", async () => {
   assert.deepEqual({ ...stop[1], clientOrderId: undefined }, { instId: "BTC-USDT", marginMode: "isolated", positionSide: "net", side: "sell", slTriggerPrice: "95", slOrderPrice: "-1", size: "-1", reduceOnly: "true", clientOrderId: undefined });
   assert.deepEqual(cancel, ["/api/v1/trade/cancel-tpsl", [{ instId: "BTC-USDT", tpslId: "77" }]]);
 });
+
+// --- dashboard view -----------------------------------------------------------
+
+test("paperDashboard maps the trader's state into Strategy 2, trades and events", async () => {
+  const { paperDashboard, PAPER_SLOT } = await import("../lib/trader/dashboard-view.js");
+  const state = {
+    ...initialState(60), equity: 63.5, updatedAt: "2026-11-05T16:10:00.000Z",
+    trades: [{ sym: "ETH-USDT", side: "long", openedAt: "2026-11-01T00:00:00.000Z", closedAt: "2026-11-02T00:00:00.000Z", pnl: -0.6, initialRisk: 0.6 }],
+    view: { positions: [{ symbol: "SOL-USDT", side: "long", size: 0.5, entryPrice: 150, markPrice: 158, stopPrice: 147, unrealizedPnl: 4, openedAt: "2026-11-04T00:00:00.000Z", adds: 1 }], entering: [] },
+  };
+  const events = [{ time: "2026-11-04T00:00:00.000Z", type: "filled", sym: "SOL-USDT", side: "long", price: 150, stop: 147 }];
+  const d = paperDashboard({ state, events }, { pot: 60 });
+  assert.equal(d.strategy.slot, PAPER_SLOT);
+  assert.equal(d.strategy.status, "in_position");
+  assert.equal(d.strategy.asOf, state.updatedAt);
+  assert.match(d.strategy.message, /\$63\.50/);
+  assert.equal(d.strategy.positions[0].stopPrice, 147);
+  assert.equal(d.trades.length, 2);
+  assert.ok(d.trades.every((t) => t.paper && t.slot === PAPER_SLOT));
+  assert.equal(d.trades.find((t) => t.closedAt).realizedPnl, -0.6);
+  assert.equal(d.events[0].level, "success");
+  assert.match(d.events[0].text, /SOL-USDT long filled at 150/);
+  assert.equal(paperDashboard(null), null);
+  const killed = paperDashboard({ state: { ...state, killed: true, view: { positions: [], entering: [] } }, events: [] });
+  assert.equal(killed.strategy.status, "paused");
+});
+
+test("the dashboard API adds the paper trader without touching the real-account slot", async () => {
+  const { buildDashboard } = await import("../api/dashboard.js");
+  const client = { get: async (path) => (path === "/api/v1/account/balance" ? { totalEquity: "100", details: [] } : []) };
+  const scanner = async () => ({ asOf: new Date(0).toISOString(), candidates: [] });
+  const without = await buildDashboard(client, { nowMs: Date.UTC(2026, 10, 5), scanner });
+  assert.equal(without.strategies.length, 1);
+  const state = { ...initialState(60), updatedAt: "2026-11-05T00:00:00.000Z", view: { positions: [], entering: [] } };
+  const withPaper = await buildDashboard(client, { nowMs: Date.UTC(2026, 10, 5), scanner, paper: { state, events: [] } });
+  assert.deepEqual(withPaper.strategies.map((s) => s.slot), ["featured", "lower_1"]);
+  assert.equal(withPaper.strategies[1].status, "watching");
+  assert.equal(withPaper.account.equity, 100, "real account equity is unchanged");
+});

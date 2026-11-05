@@ -8,6 +8,8 @@
 import { createClient, credentialsFromEnv, fetchAccount, fetchCashFlowSince, fetchClosedTrades, fetchPositions } from "../server/blofin.js";
 import { readSnapshots } from "../server/snapshots.js";
 import { getScanner } from "../server/scanner.js";
+import { paperDashboard, readPaper } from "../lib/trader/dashboard-view.js";
+import { PAPER } from "../lib/backtest/settings.js";
 
 const DAY = 86_400_000;
 /** Snapshots are hourly; older than this means the recorder has stopped. */
@@ -15,7 +17,7 @@ export const SNAPSHOT_MAX_AGE_MS = 70 * 60_000;
 const CACHE_MS = 10_000;
 let cache = { at: 0, body: null };
 
-export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [], dailyLossCap, scanner = getScanner } = {}) {
+export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [], dailyLossCap, scanner = getScanner, paper = null } = {}) {
   const asOf = new Date(nowMs).toISOString();
   const last = snapshots[snapshots.length - 1];
   const [account, positions, closed, flow, scan] = await Promise.all([
@@ -34,6 +36,8 @@ export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [
   const points = [...snapshots, { t: asOf, equity: account.equity, cashFlow: last ? flow : 0 }];
 
   const openTrades = positions.map((p) => ({ id: `open-${p.id}`, symbol: p.symbol, side: p.side, openedAt: p.openedAt, slot: "featured" }));
+  // The paper trader (BloFin demo account) shows in Strategy 2, its trades are marked paper.
+  const paperView = paperDashboard(paper, { pot: PAPER.pot });
 
   return {
     mode: "live",
@@ -56,11 +60,12 @@ export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [
           : "No open BloFin positions.",
         positions,
       },
+      ...(paperView ? [paperView.strategy] : []),
     ],
-    trades: { asOf, items: [...openTrades, ...closed.map((t) => ({ ...t, slot: "featured" }))] },
+    trades: { asOf, items: [...openTrades, ...closed.map((t) => ({ ...t, slot: "featured" })), ...(paperView?.trades ?? [])] },
     scanner: scan,
     risk: { asOf, ...(dailyLossCap > 0 ? { dailyLossCap } : {}) },
-    events: [],
+    events: paperView?.events ?? [],
   };
 }
 
@@ -74,6 +79,7 @@ export default async function handler(req, res) {
       nowMs,
       snapshots: readSnapshots(),
       dailyLossCap: Number(process.env.DAILY_LOSS_CAP) || undefined,
+      paper: readPaper(),
     });
     cache = { at: nowMs, body };
     return send(res, 200, body);
