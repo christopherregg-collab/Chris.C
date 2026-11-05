@@ -299,3 +299,83 @@ test("the dashboard API adds the paper trader without touching the real-account 
   assert.equal(withPaper.strategies[1].status, "watching");
   assert.equal(withPaper.account.equity, 100, "real account equity is unchanged");
 });
+
+// --- smoke test ---------------------------------------------------------------
+
+function fakeSmokeExchange({ failStop = false } = {}) {
+  let id = 0;
+  const orders = [];
+  const stops = [];
+  const positions = [];
+  const closed = [];
+  const calls = [];
+  return {
+    calls, held: positions,
+    name: "fake",
+    prepareAccount: async () => {},
+    specs: async (s) => Object.fromEntries(s.map((x) => [x, { contractValue: 0.001, lotSize: 0.1, minSize: 0.1, tickSize: 0.1 }])),
+    candles: async () => [{ time: 0, open: 100, high: 100, low: 100, close: 100, volume: 1 }],
+    positions: async () => positions.map((p) => ({ ...p })),
+    pendingOrders: async () => orders.map((o) => ({ ...o })),
+    pendingStops: async () => stops.map((s) => ({ ...s })),
+    setLeverage: async () => { calls.push("leverage"); },
+    placeLimit: async (symbol, side, price, contracts) => { const o = { symbol, orderId: String(++id), side, price, contracts }; orders.push(o); calls.push("limit"); return o.orderId; },
+    cancelOrder: async (_s, orderId) => { orders.splice(orders.findIndex((o) => o.orderId === orderId), 1); calls.push("cancel"); },
+    placeMarket: async (symbol, side, contracts, reduceOnly) => {
+      calls.push(reduceOnly ? "close" : "market");
+      if (reduceOnly) { positions.length = 0; closed.push({ symbol, pnl: -0.01 }); return String(++id); }
+      positions.push({ symbol, contracts, avgPrice: 100, unrealizedPnl: 0 });
+      return String(++id);
+    },
+    placeStop: async (symbol, side, triggerPrice) => {
+      if (failStop) throw new Error("rejected (code 999)");
+      const s = { symbol, stopId: String(++id), triggerPrice }; stops.push(s); calls.push("stop"); return s.stopId;
+    },
+    cancelStop: async (_s, stopId) => { const k = stops.findIndex((s) => s.stopId === stopId); if (k > -1) stops.splice(k, 1); calls.push("cancel stop"); },
+    closedPnl: async (symbol) => (closed.some((c) => c.symbol === symbol) ? -0.01 : null),
+  };
+}
+
+test("smoke test runs every order call and passes on a working exchange", async () => {
+  const { runSmokeTest } = await import("../lib/trader/smoke.js");
+  const ex = fakeSmokeExchange();
+  const lines = [];
+  const { failed } = await runSmokeTest(ex, "BTC-USDT", { log: (l) => lines.push(l), sleep: async () => {} });
+  assert.equal(failed, 0, lines.join("\n"));
+  assert.deepEqual(ex.calls, ["leverage", "limit", "cancel", "market", "stop", "cancel stop", "stop", "close", "cancel stop"]);
+  assert.equal(lines.filter((l) => l.startsWith("PASS")).length, 9);
+});
+
+test("smoke test closes its position if a step fails", async () => {
+  const { runSmokeTest } = await import("../lib/trader/smoke.js");
+  const ex = fakeSmokeExchange({ failStop: true });
+  const lines = [];
+  const { failed } = await runSmokeTest(ex, "BTC-USDT", { log: (l) => lines.push(l), sleep: async () => {} });
+  assert.ok(failed >= 1);
+  assert.ok(lines.some((l) => /FAIL .*stop-loss.*code 999/.test(l)));
+  assert.ok(ex.calls.includes("market"), "a test position was opened");
+  assert.equal(ex.held.length, 0, "test position was closed");
+});
+
+test("smoke test refuses a coin that already has a position", async () => {
+  const { runSmokeTest } = await import("../lib/trader/smoke.js");
+  const ex = fakeSmokeExchange();
+  ex.held.push({ symbol: "BTC-USDT", contracts: 1, avgPrice: 1, unrealizedPnl: 0 });
+  const lines = [];
+  const { failed } = await runSmokeTest(ex, "BTC-USDT", { log: (l) => lines.push(l), sleep: async () => {} });
+  assert.equal(failed, 1);
+  assert.deepEqual(ex.calls, []);
+});
+
+test("trading clients use the demo host unless explicitly live", async () => {
+  const { createTradingClient } = await import("../lib/trader/blofin-exchange.js");
+  const { BLOFIN_BASE } = await import("../server/blofin.js");
+  const urls = [];
+  const fetchImpl = async (url) => { urls.push(url); return { ok: true, status: 200, json: async () => ({ code: "0", data: [] }) }; };
+  await createTradingClient({ key: "k", secret: "s", passphrase: "p" }, { fetchImpl }).get("/x");
+  await createTradingClient({ key: "k", secret: "s", passphrase: "p" }, { fetchImpl, live: "yes" }).get("/x");
+  await createTradingClient({ key: "k", secret: "s", passphrase: "p" }, { fetchImpl, live: true }).get("/x");
+  assert.ok(urls[0].startsWith(DEMO_BASE));
+  assert.ok(urls[1].startsWith(DEMO_BASE), "only the boolean true means live");
+  assert.ok(urls[2].startsWith(BLOFIN_BASE + "/"));
+});

@@ -39,11 +39,16 @@ echo "== Restarting"
 install -m 644 deploy/trading-bot.service /etc/systemd/system/trading-bot.service
 install -m 644 deploy/paper-trader.service /etc/systemd/system/paper-trader.service
 install -m 644 deploy/paper-trader.timer /etc/systemd/system/paper-trader.timer
+install -m 644 deploy/live-trader.service /etc/systemd/system/live-trader.service
+install -m 644 deploy/live-trader.timer /etc/systemd/system/live-trader.timer
 systemctl daemon-reload
 systemctl restart trading-bot
 sleep 3
 echo "Dashboard: $(systemctl is-active trading-bot)"
 if systemctl is-enabled paper-trader.timer >/dev/null 2>&1; then
   echo "Paper trader timer: $(systemctl is-active paper-trader.timer)"
+fi
+if systemctl is-enabled live-trader.timer >/dev/null 2>&1; then
+  echo "LIVE trader timer: $(systemctl is-active live-trader.timer)"
 fi
 echo "== Done. Reload the dashboard in your browser."

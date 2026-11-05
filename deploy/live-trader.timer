@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the LIVE trader every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+Unit=live-trader.service
+
+[Install]
+WantedBy=timers.target

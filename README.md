@@ -6,7 +6,7 @@ scanner and risk. It runs on **demo data** until a live bot or exchange integrat
 - `/`: the bot dashboard (React + TypeScript).
 - `/markets.html`: the earlier markets page, with TradingView charts and the indicator signals table.
 
-See [BACKTEST.md](BACKTEST.md) for the backtester, [PAPER_TRADING.md](PAPER_TRADING.md) for the demo-account paper trader, [ROADMAP.md](ROADMAP.md) for where this is heading, and [HANDOVER.md](HANDOVER.md) to pick the project up on your own computer.
+See [BACKTEST.md](BACKTEST.md) for the backtester, [PAPER_TRADING.md](PAPER_TRADING.md) for the demo-account paper trader, [LIVE_TRADING.md](LIVE_TRADING.md) for trading real money, [ROADMAP.md](ROADMAP.md) for where this is heading, and [HANDOVER.md](HANDOVER.md) to pick the project up on your own computer.
 
 ## Run it
 
