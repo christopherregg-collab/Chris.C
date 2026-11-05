@@ -92,7 +92,7 @@ export function TradesCard({ data, state, error, onRetry, now, strategies }: {
                   return (
                     <tr key={t.id}>
                       <td>{t.symbol}</td>
-                      <td>{slotName(t.slot)}</td>
+                      <td>{slotName(t.slot)}{t.paper && !/paper/i.test(slotName(t.slot)) && <> <span className="badge">Paper</span></>}</td>
                       <td>{t.side === "long" ? "Long" : "Short"}</td>
                       <td>{fmtDateTime(t.openedAt)}</td>
                       <td>{t.closedAt ? fmtDateTime(t.closedAt) : <span className="badge">Open</span>}</td>

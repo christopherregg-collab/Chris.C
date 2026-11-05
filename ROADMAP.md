@@ -47,7 +47,30 @@ Goal: replace the demo data with the real account, without any ability to trade 
 
 Goal: know whether the signals would actually have made money before acting on them.
 
-- **Backtester.** Replay months of historical candles through `evaluate()`, simulate entering on
+- **Momentum backtester (built, see BACKTEST.md).** Core Momentum and Big Swing on BloFin 4h
+  data for six coins since 2023, at three aggression levels with a win-streak risk ladder, limit
+  entries, fees, slippage, funding, liquidation, Monte Carlo risk of ruin and an
+  in-sample/out-of-sample check. First results (Nov 2026): Core Momentum has no edge; Big Swing's
+  longs do (profit factor ~1.9 over 165 trades) but its shorts lose, and it is uneven year to year.
+  Neither is ready for real money.
+- **Walk-forward test, Core Trend, long-only Big Swing (Nov 2026).** In the rolling walk-forward
+  test (Mar 2024 to Nov 2026, settings picked each quarter from the previous year only), long-only
+  Big Swing returned +90% with a 21% max drawdown and PF (R) 1.65, against +14% for an equal split
+  of the six coins. Core Trend (daily trend-holder) was flat, and lost on the most recent data.
+  Big Swing moves to paper trading (PAPER_TRADING.md); Core Trend needs more work.
+- **Core rework and robustness check (Nov 2026).** Volatility-based sizing raised the trend-holder's
+  exposure but not its results (walk-forward -9% to -12%). Time-series momentum (hold while above
+  the price N days ago) did better: fixed 20-30 day lookbacks made +19% to +34% from Mar 2024 with
+  ~36% max drawdown, against +15% and 63% for buy and hold. But its walk-forward result swings from
+  -13% to +26% depending on which day the test starts (positive on 8 of 14 start dates), so Core
+  is still not ready. Big Swing's walk-forward stayed between +65% and +87% on all 14 start dates:
+  its edge doesn't depend on the start date.
+- **Big Swing on 21 more coins (Nov 2026).** The unchanged rules on the 21 most-traded other crypto
+  perpetuals on BloFin, which they were never tuned on: +0.11R a trade (PF 1.14, 12 of 21 coins
+  positive) against +0.84R on the original six. The edge is real but much thinner away from the
+  large caps, so expect paper results below the six-coin backtest. The 21 are watch-only, in the
+  dashboard scanner, which now shows Big Swing setups and 30-day momentum from BloFin 4h candles.
+- **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.
 - **Tune the scoring.** Today RSI works against the trend, which makes Strong buy and Strong sell

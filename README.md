@@ -6,7 +6,7 @@ scanner and risk. It runs on **demo data** until a live bot or exchange integrat
 - `/`: the bot dashboard (React + TypeScript).
 - `/markets.html`: the earlier markets page, with TradingView charts and the indicator signals table.
 
-See [ROADMAP.md](ROADMAP.md) for where this is heading, and [HANDOVER.md](HANDOVER.md) to pick the project up on your own computer.
+See [BACKTEST.md](BACKTEST.md) for the backtester, [PAPER_TRADING.md](PAPER_TRADING.md) for the demo-account paper trader, [LIVE_TRADING.md](LIVE_TRADING.md) for trading real money, [ROADMAP.md](ROADMAP.md) for where this is heading, and [HANDOVER.md](HANDOVER.md) to pick the project up on your own computer.
 
 ## Run it
 
@@ -17,6 +17,7 @@ npm install
 npm run dev        # http://localhost:5173, also serves /api/* like Vercel does
 npm test           # API and indicator tests (node:test) + dashboard calculation tests (Vitest)
 npm run build      # typecheck, then production build into dist/
+npm run backtest   # momentum backtest (see BACKTEST.md; needs npm run backtest:fetch first)
 ```
 
 Production runs on a Hetzner server; Vercel only forwards to it. See "Live deployment" below.

@@ -26,7 +26,13 @@ const empty = (): StrategyDisplayConfig => ({ name: "", description: "", timefra
 
 export const defaultStrategies: Record<SlotId, StrategyDisplayConfig> = {
   featured: empty(),
-  lower_1: empty(),
+  lower_1: {
+    name: "Big Swing (paper)",
+    description: "Long-only 4h breakouts in strong uptrends, adding to winners. Paper trading on the BloFin demo account.",
+    timeframe: "4h",
+    symbols: ["BTC", "ETH", "SOL", "XRP", "BNB", "DOGE"],
+    notes: "Runs every 5 minutes on the server (scripts/paper-trader.js). Conservative level, $60 pot. Paper P&L doesn't count toward the real daily loss cap.",
+  },
   lower_2: empty(),
   lower_3: empty(),
 };

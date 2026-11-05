@@ -56,6 +56,9 @@ export function Header({ state, now, theme, onToggleTheme, onReload, onGoTo, str
         {adapter.kind === "demo" && (
           <span className="badge badge--demo" title="Showing demo fixtures, not a live bot or exchange account">Demo</span>
         )}
+        {state.status === "ready" && state.data.exchangeAccount === "demo" && (
+          <span className="badge badge--demo" title="Showing the BloFin demo (paper trading) account, not your real account">BloFin demo account</span>
+        )}
         {state.status === "loading" && <span className="health" title="Loading…"><StatusDot tone="idle" /><span className="health-label">Loading…</span></span>}
         {state.status === "error" && <span className="health health--error" title="Data unavailable"><StatusDot tone="error" /><span className="health-label">Data unavailable</span></span>}
         {healthInfo && health && (

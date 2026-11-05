@@ -5,7 +5,8 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { createClient, credentialsFromEnv, fetchAccount, fetchCashFlowSince } from "./blofin.js";
+import { fetchAccount, fetchCashFlowSince } from "./blofin.js";
+import { accountClient, dashboardAccount } from "./account.js";
 
 export const SNAPSHOT_FILE = process.env.SNAPSHOT_FILE || "data/equity.jsonl";
 const HOUR = 3_600_000;
@@ -31,12 +32,13 @@ export function appendSnapshot(point, file = SNAPSHOT_FILE) {
 }
 
 /** Take a snapshot unless one already exists for the current hour. Returns the new point or null. */
-export async function snapshotIfDue(client, { file = SNAPSHOT_FILE, nowMs = Date.now() } = {}) {
+export async function snapshotIfDue(client, { file = SNAPSHOT_FILE, nowMs = Date.now(), demo = false } = {}) {
   const points = readSnapshots(file);
   const last = points[points.length - 1];
   if (last && Math.floor(Date.parse(last.t) / HOUR) === Math.floor(nowMs / HOUR)) return null;
   const { equity } = await fetchAccount(client);
-  const cashFlow = last ? await fetchCashFlowSince(client, Date.parse(last.t)) : 0;
+  // The demo host has no funding account, so its transfers can't be read: recorded as 0.
+  const cashFlow = last ? await fetchCashFlowSince(client, Date.parse(last.t)).catch((err) => { if (demo) return 0; throw err; }) : 0;
   const point = { t: new Date(nowMs).toISOString(), equity: round2(equity), cashFlow: round2(cashFlow) };
   appendSnapshot(point, file);
   return point;
@@ -46,14 +48,15 @@ const round2 = (n) => Math.round(n * 100) / 100;
 
 /** Check every minute; records at most one snapshot per hour. */
 export function startSnapshotJob(log = console) {
-  const creds = credentialsFromEnv();
-  if (!creds) {
-    log.warn("snapshots: BloFin credentials not set, equity history is not being recorded");
+  const account = dashboardAccount();
+  const client = accountClient(account);
+  if (!client) {
+    log.warn(`snapshots: ${account.label} credentials not set, equity history is not being recorded`);
     return () => {};
   }
-  const client = createClient(creds);
+  log.info(`snapshots: recording the ${account.label} to ${account.snapshotFile}`);
   const tick = () =>
-    snapshotIfDue(client)
+    snapshotIfDue(client, { file: account.snapshotFile, demo: account.kind === "demo" })
       .then((p) => p && log.info(`snapshot ${p.t} equity=${p.equity} cashFlow=${p.cashFlow}`))
       .catch((err) => log.error(`snapshot failed: ${err.message}`));
   tick();

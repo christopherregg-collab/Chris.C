@@ -89,6 +89,8 @@ export interface Trade {
   realizedPnl?: number;
   /** Amount at risk at entry (entry-to-stop distance × size). Needed for R multiples. */
   initialRisk?: number;
+  /** A paper trade on the exchange's demo account: shown, but not counted against real-money limits. */
+  paper?: boolean;
 }
 
 export interface TradesData {
@@ -131,6 +133,8 @@ export interface BotEvent {
 
 export interface DashboardData {
   mode: "demo" | "live";
+  /** Which exchange account live data comes from: the real one, or the exchange's demo (paper) account. */
+  exchangeAccount?: "real" | "demo";
   currency: string;
   health: BotHealth;
   account: AccountSummary;
