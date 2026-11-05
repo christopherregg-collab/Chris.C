@@ -9,7 +9,9 @@
     "start": "node --dns-result-order=ipv4first --env-file-if-exists=.env server/index.js",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.js && vitest run"
+    "test": "node --test test/*.test.js && vitest run",
+    "backtest": "node --dns-result-order=ipv4first scripts/backtest.js",
+    "backtest:fetch": "node --dns-result-order=ipv4first scripts/fetch-blofin.js"
   },
   "engines": {
     "node": ">=20"

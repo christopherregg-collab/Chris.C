@@ -47,7 +47,11 @@ Goal: replace the demo data with the real account, without any ability to trade 
 
 Goal: know whether the signals would actually have made money before acting on them.
 
-- **Backtester.** Replay months of historical candles through `evaluate()`, simulate entering on
+- **Momentum backtester (built, see BACKTEST.md).** Core Momentum and Big Swing on BloFin hourly
+  data, at three aggression levels with a win-streak risk ladder, fees, slippage, funding,
+  liquidation, Monte Carlo risk of ruin and an in-sample/out-of-sample check. Next: run it on real
+  BloFin data and choose a level from the results.
+- **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.
 - **Tune the scoring.** Today RSI works against the trend, which makes Strong buy and Strong sell

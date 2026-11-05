@@ -1,0 +1,284 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { atr, adx, donchian, trailingMean, resample, htfTrend } from "../lib/backtest/ta.js";
+import { createLadder } from "../lib/backtest/ladder.js";
+import { runBacktest, signalAt } from "../lib/backtest/engine.js";
+import { summarize, monteCarlo, maxDrawdown } from "../lib/backtest/stats.js";
+import { syntheticMarket } from "../lib/backtest/synthetic.js";
+import { parseCandle, fetchCandles, fetchSpecs, fetchFunding } from "../lib/backtest/blofin-data.js";
+import { COSTS, LADDER, LEVELS, LIMITS, STRATEGIES, DEFAULT_SPECS } from "../lib/backtest/config.js";
+
+const HOUR = 3_600_000;
+const T0 = Date.UTC(2025, 0, 1);
+const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
+
+/** Candles from [open, high, low, close] tuples, one per hour. */
+const bars = (rows, start = T0) => rows.map(([open, high, low, close], i) => ({ time: start + i * HOUR, open, high, low, close, volume: 1 }));
+/** `n` quiet bars around `price`, each with a high-low range of 2. */
+const flat = (n, price = 100) => Array.from({ length: n }, () => [price, price + 1, price - 1, price]);
+
+// Simple test strategy: 3-bar breakout, no trend/ADX/volume filters, 2 ATR stop.
+const TEST_STRATEGY = {
+  label: "Test", symbols: ["X"], barMs: HOUR, breakout: 3, exitChannel: 3, trendFilters: [],
+  adxMin: 0, volumeMult: 0, stopAtr: 2, trailAtr: 100, pyramid: null,
+};
+const NO_COSTS = { ...COSTS, takerFee: 0, slippage: 0, defaultFundingRate: 0 };
+const LEVEL = { label: "L", baseRisk: 0.01, step: 0.005, ceiling: 0.03, leverageCap: 100 };
+const LIM = { dailyLossCap: 0.5, killSwitch: null, maxOpenPositions: 3 };
+const SPECS = { X: { qtyStep: 1e-6, minQty: 1e-6 } };
+
+function bt(rows, over = {}) {
+  return runBacktest({
+    strategy: TEST_STRATEGY, level: LEVEL, ladder: LADDER, limits: LIM, costs: NO_COSTS, specs: SPECS,
+    data: { X: bars(rows) }, startEquity: 1000, ...over,
+  });
+}
+
+// --- indicators -------------------------------------------------------------
+
+test("atr of constant-range bars equals the range", () => {
+  const a = atr(bars(flat(30)), 14);
+  assert.equal(a[13], null);
+  near(a[14], 2);
+  near(a[29], 2);
+});
+
+test("adx is high in a steady trend and starts at 2*period-1", () => {
+  const rows = Array.from({ length: 60 }, (_, i) => [100 + i, 101 + i, 99.5 + i, 100.8 + i]);
+  const a = adx(bars(rows), 14);
+  assert.equal(a[26], null);
+  assert.notEqual(a[27], null);
+  assert.ok(a[59] > 50, `adx ${a[59]}`);
+});
+
+test("donchian excludes the current bar", () => {
+  const d = donchian(bars([[1, 5, 1, 1], [1, 3, 0, 1], [1, 9, 1, 1]]), 2);
+  assert.equal(d.upper[1], null);
+  assert.equal(d.upper[2], 5);
+  assert.equal(d.lower[2], 0);
+});
+
+test("trailingMean averages the previous values only", () => {
+  assert.deepEqual(trailingMean([1, 2, 3, 10], 2), [null, null, 1.5, 2.5]);
+});
+
+test("resample builds 4h bars and marks incomplete ones", () => {
+  const out = resample(bars(flat(6)), 4 * HOUR, HOUR);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].complete, true);
+  assert.equal(out[1].complete, false);
+});
+
+test("htfTrend only uses higher-timeframe bars that have already closed", () => {
+  // 2 complete 4h bars rising, so EMA(1) == close: trend is +1 only once a 4h bar closed.
+  const rows = Array.from({ length: 8 }, (_, i) => [100 + i, 101 + i, 99 + i, 100 + i]);
+  const tr = htfTrend(bars(rows), HOUR, 4 * HOUR, 2);
+  // EMA(2) needs 2 closed 4h bars: available from the bar that closes the second 4h bar (index 7).
+  assert.deepEqual(tr.slice(0, 7), [0, 0, 0, 0, 0, 0, 0]);
+  assert.equal(tr[7], 1);
+});
+
+// --- risk ladder ------------------------------------------------------------
+
+test("ladder steps up on win streaks, resets on a loss, halves after two losses", () => {
+  const l = createLadder({ baseRisk: 0.01, step: 0.005, ceiling: 0.02 }, LADDER);
+  assert.equal(l.current(100, 100), 0.01);
+  l.record(1);
+  assert.equal(l.current(100, 100), 0.01);
+  l.record(1);
+  assert.equal(l.current(100, 100), 0.015);
+  l.record(1);
+  assert.equal(l.current(100, 100), 0.02);
+  l.record(1);
+  assert.equal(l.current(100, 100), 0.02, "capped at the ceiling");
+  l.record(-1);
+  assert.equal(l.current(100, 100), 0.01);
+  l.record(-1);
+  assert.equal(l.current(100, 100), 0.005);
+  l.record(1);
+  assert.equal(l.current(100, 100), 0.01, "a win restores base risk");
+});
+
+test("ladder caps risk at base while equity is >10% below its peak", () => {
+  const l = createLadder({ baseRisk: 0.01, step: 0.01, ceiling: 0.05 }, LADDER);
+  l.record(1); l.record(1); l.record(1);
+  assert.equal(l.current(100, 100), 0.03);
+  assert.equal(l.current(85, 100), 0.01);
+});
+
+// --- engine -----------------------------------------------------------------
+
+test("breakout enters at the next open, sized so the stop risks 1% of equity", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], ...flat(3, 106)];
+  const r = bt(rows);
+  const t = r.trades[0];
+  assert.equal(t.side, "long");
+  assert.equal(t.openTime, T0 + 31 * HOUR, "filled on the bar after the signal");
+  near(t.entryPrice, 106);
+  // ATR at the signal bar: Wilder smoothing of 2s and the breakout bar's range of 6.
+  const a = atr(bars(rows), 14)[30];
+  near(t.qty, (1000 * 0.01) / (2 * a), 1e-6);
+});
+
+test("a gap through the stop fills at the open, not the stop", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], [90, 91, 85, 88], ...flat(2, 88)];
+  const r = bt(rows);
+  const t = r.trades[0];
+  assert.equal(t.reason, "stop");
+  near(t.exitPrice, 90);
+  assert.ok(t.r < -1, "gap loss is bigger than 1R");
+});
+
+test("fees and slippage are charged on both fills", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], ...flat(3, 106)];
+  const costs = { ...NO_COSTS, takerFee: 0.001, slippage: 0.001 };
+  const r = bt(rows, { costs });
+  const t = r.trades[0];
+  near(t.entryPrice, 106 * 1.001);
+  assert.ok(r.fees > 0);
+  near(r.endEquity, 1000 + t.pnl, 1e-6);
+});
+
+test("short breakouts work the same way down", () => {
+  const rows = [...flat(30), [100, 100, 94, 95], [94, 95, 93, 94], ...flat(3, 94)];
+  const t = bt(rows).trades[0];
+  assert.equal(t.side, "short");
+  near(t.entryPrice, 94);
+});
+
+test("leverage cap limits position size", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], ...flat(3, 106)];
+  const level = { ...LEVEL, baseRisk: 0.5, leverageCap: 2 };
+  const t = bt(rows, { level }).trades[0];
+  assert.ok(t.qty * 106 <= 2000 + 1e-6, `notional ${t.qty * 106}`);
+});
+
+test("orders below the minimum size are skipped", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], ...flat(3, 106)];
+  const r = bt(rows, { specs: { X: { qtyStep: 1, minQty: 100 } } });
+  assert.equal(r.trades.length, 0);
+  assert.equal(r.skippedMinSize, 1);
+});
+
+test("a huge gap with high leverage liquidates the account", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], [40, 41, 30, 35], ...flat(2, 35)];
+  const level = { ...LEVEL, baseRisk: 1, leverageCap: 20 };
+  const r = bt(rows, { level });
+  assert.equal(r.liquidations, 1);
+  assert.equal(r.trades[0].reason, "liquidation");
+  assert.equal(r.endEquity, 0, "the whole pot is lost, never below zero");
+  near(r.trades[0].pnl, -1000, 1e-6);
+});
+
+test("pyramiding adds units as price moves and raises the stop", () => {
+  const up = Array.from({ length: 12 }, (_, i) => {
+    const p = 106 + i * 3;
+    return [p, p + 3.5, p - 0.5, p + 3];
+  });
+  const rows = [...flat(30), [100, 106, 100, 105], ...up];
+  const strategy = { ...TEST_STRATEGY, exitChannel: 50, pyramid: { maxAdds: 3, everyAtr: 1 } };
+  const r = bt(rows, { strategy });
+  const t = r.trades[0];
+  assert.equal(t.adds, 3);
+  assert.equal(t.reason, "end of test");
+  assert.ok(t.r > 3, `pyramided trade R ${t.r}`);
+});
+
+test("daily loss cap flattens and blocks new entries for the day", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], [100, 101, 99, 100], ...flat(3, 100)];
+  const r = bt(rows, { level: { ...LEVEL, baseRisk: 0.2 }, limits: { ...LIM, dailyLossCap: 0.05 } });
+  assert.ok(r.events.some((e) => e.type === "daily loss cap"));
+});
+
+test("kill switch stops trading for good", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], [80, 81, 79, 80], ...flat(30, 80), [80, 90, 80, 89], ...flat(3, 89)];
+  const r = bt(rows, { level: { ...LEVEL, baseRisk: 0.5 }, limits: { ...LIM, killSwitch: 0.25 } });
+  assert.equal(r.killed, true);
+  assert.equal(r.trades.length, 1, "no trades after the kill switch");
+});
+
+test("signals respect the higher-timeframe trend filter", () => {
+  const strategy = { ...TEST_STRATEGY, trendFilters: [{ ms: 4 * HOUR, ema: 3 }] };
+  // Downtrend for 40 bars, then one upside breakout: the 4h trend is still down, so no long.
+  const rows = [...Array.from({ length: 40 }, (_, i) => [200 - i, 201 - i, 199 - i, 200 - i]), [161, 175, 161, 174]];
+  const r = bt(rows, { strategy });
+  assert.equal(r.trades.filter((t) => t.side === "long").length, 0);
+});
+
+test("the real strategies run on simulated data without errors", () => {
+  const data = syntheticMarket({ hours: 120 * 24 });
+  for (const s of Object.values(STRATEGIES)) {
+    for (const level of Object.values(LEVELS)) {
+      const r = runBacktest({ strategy: s, level, ladder: LADDER, limits: LIMITS, costs: COSTS, specs: DEFAULT_SPECS, data, startEquity: 100 });
+      const m = summarize(r);
+      assert.ok(Number.isFinite(m.endEquity) && m.endEquity >= 0);
+      for (const t of r.trades) assert.ok(Number.isFinite(t.pnl));
+    }
+  }
+});
+
+test("signalAt never fires before indicators are ready", () => {
+  const data = syntheticMarket({ hours: 10 });
+  const s = STRATEGIES.core;
+  const r = runBacktest({ strategy: s, level: LEVELS.max, ladder: LADDER, limits: LIMITS, costs: COSTS, specs: DEFAULT_SPECS, data, startEquity: 100 });
+  assert.equal(r.trades.length, 0);
+  assert.equal(typeof signalAt, "function");
+});
+
+// --- stats ------------------------------------------------------------------
+
+test("maxDrawdown measures the deepest fall from a peak", () => {
+  near(maxDrawdown([100, 120, 90, 130, 117]), 0.25);
+});
+
+test("monteCarlo is reproducible and shows no drawdown when every trade wins", () => {
+  const trades = [{ r: 2 }, { r: 1 }];
+  const a = monteCarlo(trades, LEVELS.max, LADDER, { runs: 200, tradesPerYear: 20 });
+  const b = monteCarlo(trades, LEVELS.max, LADDER, { runs: 200, tradesPerYear: 20 });
+  assert.deepEqual(a, b);
+  assert.equal(a.probDrawdown25, 0);
+  assert.ok(a.medianReturn > 0);
+  assert.equal(monteCarlo([], LEVELS.max, LADDER), null);
+});
+
+test("monteCarlo shows ruin risk for a losing strategy at high risk", () => {
+  const trades = [{ r: -1 }, { r: -1 }, { r: 1.5 }];
+  const mc = monteCarlo(trades, { baseRisk: 0.2, step: 0.1, ceiling: 0.5 }, LADDER, { runs: 500, tradesPerYear: 100 });
+  assert.ok(mc.probDrawdown90 > 0.5);
+});
+
+// --- BloFin data ------------------------------------------------------------
+
+test("parseCandle reads BloFin's row format", () => {
+  assert.deepEqual(parseCandle(["1700000000000", "1", "2", "0.5", "1.5", "10", "0", "0", "1"]),
+    { time: 1700000000000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10, confirmed: true });
+});
+
+test("fetchCandles pages backwards and drops unconfirmed bars", async () => {
+  const all = Array.from({ length: 10 }, (_, i) => [String(T0 + i * HOUR), "1", "2", "0", "1", "5", "0", "0", i === 9 ? "0" : "1"]);
+  const calls = [];
+  const get = async (path, params) => {
+    calls.push(params.after);
+    const older = all.filter((r) => params.after === undefined || Number(r[0]) < params.after).reverse();
+    return older.slice(0, 4); // newest first, like BloFin
+  };
+  const out = await fetchCandles(get, "BTC-USDT", T0 + 2 * HOUR, { limit: 4 });
+  assert.deepEqual(out.map((c) => (c.time - T0) / HOUR), [2, 3, 4, 5, 6, 7, 8]);
+  assert.ok(calls.length >= 2);
+});
+
+test("fetchFunding pages backwards", async () => {
+  const all = Array.from({ length: 5 }, (_, i) => ({ fundingTime: String(T0 + i * 8 * HOUR), fundingRate: "0.0001" }));
+  const get = async (_, { after }) => all.filter((r) => after === undefined || Number(r.fundingTime) < after).reverse().slice(0, 2);
+  const out = await fetchFunding(get, "BTC-USDT", T0);
+  assert.equal(out.length, 5);
+  assert.equal(out[0].time, T0);
+});
+
+test("fetchSpecs converts contracts to base units", async () => {
+  const get = async () => [{ instId: "BTC-USDT", contractValue: "0.001", lotSize: "0.1", minSize: "0.1", maxLeverage: "150" }, { instId: "DOGE-USDT" }];
+  const specs = await fetchSpecs(get, ["BTC-USDT"]);
+  near(specs["BTC-USDT"].qtyStep, 0.0001);
+  near(specs["BTC-USDT"].minQty, 0.0001);
+  assert.equal(specs["DOGE-USDT"], undefined);
+});
