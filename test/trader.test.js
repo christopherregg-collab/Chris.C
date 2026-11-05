@@ -396,3 +396,26 @@ test("a rejected entry order is logged and doesn't stop the run", async () => {
   assert.match(rejected.error, /Insufficient margin/);
   assert.equal(state.coins["BTC-USDT"].status, "flat");
 });
+
+test("closedPnl reads position history, or sums fills when the history is empty", async () => {
+  const { createBlofinExchange } = await import("../lib/trader/blofin-exchange.js");
+  const T = 1_800_000_000_000;
+  const make = (history, fills) => createBlofinExchange({
+    get: async (path) => (path === "/api/v1/account/positions-history" ? history : path === "/api/v1/trade/fills-history" ? fills : []),
+    post: async () => ({}),
+  }, { publicGet: async () => [] });
+  // Position history: only positions opened since the order was placed count.
+  const fromHistory = await make([
+    { instId: "BTC-USDT", createTime: String(T + 1000), realizedPnl: "-0.02" },
+    { instId: "BTC-USDT", createTime: String(T - 3_600_000), realizedPnl: "5" },
+  ], []).closedPnl("BTC-USDT", T);
+  assert.equal(fromHistory, -0.02);
+  // Empty history: open fill (fee only) + closing fill (pnl and fee).
+  const fromFills = await make([], [
+    { instId: "BTC-USDT", ts: String(T + 1000), fillPnl: "0", fee: "0.0046" },
+    { instId: "BTC-USDT", ts: String(T + 9000), fillPnl: "-0.021", fee: "0.0046" },
+  ]).closedPnl("BTC-USDT", T);
+  assert.ok(Math.abs(fromFills - (-0.021 - 0.0092)) < 1e-12);
+  // Only the opening fill so far: not closed yet.
+  assert.equal(await make([], [{ instId: "BTC-USDT", ts: String(T + 1000), fillPnl: "0", fee: "0.0046" }]).closedPnl("BTC-USDT", T), null);
+});
