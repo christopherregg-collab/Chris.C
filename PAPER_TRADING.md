@@ -32,7 +32,9 @@ To stop: `deploy/setup-paper-trader.sh stop`. The state and log are kept.
 
 The paper trader shows in the **Strategy 2** card ("Big Swing (paper)"): status, open positions
 with their stops, and a summary of its equity. Its trades appear in the Trades card marked as paper,
-and its fills, exits and stop changes appear under notifications. Paper P&L is never counted
+and its fills, exits and stop changes appear under notifications. The **Scanner** card shows where
+27 coins stand against the Big Swing rules (signal, setup close to a breakout, or weak uptrend) with
+their 30-day momentum; only the six traded coins are marked "paper-traded". Paper P&L is never counted
 against the real account's daily loss cap.
 
 To update the server (dashboard, backtester and paper trader) without a local computer, run in the

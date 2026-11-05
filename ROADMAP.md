@@ -65,6 +65,11 @@ Goal: know whether the signals would actually have made money before acting on t
   -13% to +26% depending on which day the test starts (positive on 8 of 14 start dates), so Core
   is still not ready. Big Swing's walk-forward stayed between +65% and +87% on all 14 start dates:
   its edge doesn't depend on the start date.
+- **Big Swing on 21 more coins (Nov 2026).** The unchanged rules on the 21 most-traded other crypto
+  perpetuals on BloFin, which they were never tuned on: +0.11R a trade (PF 1.14, 12 of 21 coins
+  positive) against +0.84R on the original six. The edge is real but much thinner away from the
+  large caps, so expect paper results below the six-coin backtest. The 21 are watch-only, in the
+  dashboard scanner, which now shows Big Swing setups and 30-day momentum from BloFin 4h candles.
 - **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.

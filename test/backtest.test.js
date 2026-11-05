@@ -419,3 +419,15 @@ test("a strategy can turn off the daily loss cap", () => {
   assert.ok(capped.events.some((e) => e.type === "daily loss cap"));
   assert.ok(!uncapped.events.some((e) => e.type === "daily loss cap"));
 });
+
+test("funding uses the coin's real payment times, including 4-hourly ones", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], [106, 107, 105, 106], [106, 107, 105, 106], ...flat(2, 106)];
+  // Payments every 2 hours at 0.1% over the whole test.
+  const funding = { X: new Map(Array.from({ length: 40 }, (_, k) => [T0 + k * 2 * HOUR, 0.001])) };
+  const r = bt(rows, { funding, costs: { ...NO_COSTS, defaultFundingRate: 0 } });
+  const t = r.trades[0];
+  let payments = 0;
+  for (let f = t.openTime; f < t.closeTime; f += HOUR) if ((f - T0) % (2 * HOUR) === 0) payments++;
+  assert.ok(payments >= 2);
+  near(r.funding, t.qty * 106 * 0.001 * payments, 1e-6);
+});

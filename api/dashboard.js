@@ -1,13 +1,17 @@
 // GET /api/dashboard: the live DashboardData (see src/types.ts), read from
 // BloFin with a read-only API key held in server environment variables.
 //
-// There is no trading bot yet, so: open positions are shown in the Strategy 1
-// slot, the scanner is the markets-page signals run on the server
-// (server/scanner.js), and "health" means "the BloFin API answered".
+// Real-account positions are shown in the Strategy 1 slot, the paper trader in Strategy 2,
+// the scanner shows Big Swing setups and momentum across the watchlist
+// (server/setup-scanner.js; SCANNER_MODE=indicators for the older Coinbase EMA/MACD/RSI
+// scanner), and "health" means "the BloFin API answered".
 
 import { createClient, credentialsFromEnv, fetchAccount, fetchCashFlowSince, fetchClosedTrades, fetchPositions } from "../server/blofin.js";
 import { readSnapshots } from "../server/snapshots.js";
 import { getScanner } from "../server/scanner.js";
+import { getSetupScanner } from "../server/setup-scanner.js";
+
+const defaultScanner = (nowMs) => (process.env.SCANNER_MODE === "indicators" ? getScanner(nowMs) : getSetupScanner(nowMs));
 import { paperDashboard, readPaper } from "../lib/trader/dashboard-view.js";
 import { PAPER } from "../lib/backtest/settings.js";
 
@@ -17,7 +21,7 @@ export const SNAPSHOT_MAX_AGE_MS = 70 * 60_000;
 const CACHE_MS = 10_000;
 let cache = { at: 0, body: null };
 
-export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [], dailyLossCap, scanner = getScanner, paper = null } = {}) {
+export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [], dailyLossCap, scanner = defaultScanner, paper = null } = {}) {
   const asOf = new Date(nowMs).toISOString();
   const last = snapshots[snapshots.length - 1];
   const [account, positions, closed, flow, scan] = await Promise.all([
