@@ -55,3 +55,25 @@ test("setupScannerSettings defaults to the watchlist and reads SCANNER_SYMBOLS s
   assert.deepEqual(setupScannerSettings({}).symbols, WATCHLIST);
   assert.deepEqual(setupScannerSettings({ SCANNER_SYMBOLS: "btc, pepe,../x" }).symbols, ["BTC-USDT", "PEPE-USDT"]);
 });
+
+test("findPumps lists crypto perps up 30%+ in 24h, biggest first, and skips stocks", async () => {
+  const { findPumps, pumpText } = await import("../server/setup-scanner.js");
+  const get = async (path) => {
+    if (path === "/api/v1/market/tickers") return [
+      { instId: "AAA-USDT", last: "1.9", open24h: "1", volCurrency24h: "1000000" },
+      { instId: "BBB-USDT", last: "1.35", open24h: "1", volCurrency24h: "10" },
+      { instId: "CCC-USDT", last: "1.1", open24h: "1", volCurrency24h: "10" },
+      { instId: "STOCK-USDT", last: "3", open24h: "1", volCurrency24h: "10" },
+      { instId: "AAA-USDC", last: "5", open24h: "1", volCurrency24h: "10" },
+    ];
+    if (path === "/api/v1/market/instruments") return [
+      { instId: "AAA-USDT", assetClass: "Crypto", state: "live" }, { instId: "BBB-USDT", assetClass: "Crypto", state: "live" },
+      { instId: "CCC-USDT", assetClass: "Crypto", state: "live" }, { instId: "STOCK-USDT", assetClass: "Stocks", state: "live" },
+    ];
+    return [];
+  };
+  const pumps = await findPumps(get, Date.UTC(2030, 0, 1));
+  assert.deepEqual(pumps.map((p) => p.sym), ["AAA-USDT", "BBB-USDT"]);
+  assert.match(pumpText(0.9), /Up 90% in 24h: don't chase \(.*50%\+/);
+  assert.match(pumpText(0.35), /30%\+/);
+});

@@ -75,6 +75,38 @@ async function pool(items, size, fn) {
   return out;
 }
 
+// Pump warnings: BloFin crypto perps up 30%+ in 24h. In a test over a year of 150 coins (Nov
+// 2026), buying after such a rise lost on average: coins up 30%+ were 6% lower a week later,
+// coins up 50%+ 12% lower (median -19%). Shorting them with a stop-loss didn't pay either.
+export const PUMP_MIN = 0.3;
+let instrumentCache = { at: 0, crypto: null };
+
+async function cryptoInstruments(get, nowMs) {
+  if (instrumentCache.crypto && nowMs - instrumentCache.at < 6 * 3_600_000) return instrumentCache.crypto;
+  const rows = await get("/api/v1/market/instruments");
+  const crypto = new Set((Array.isArray(rows) ? rows : []).filter((r) => r.assetClass === "Crypto" && r.state === "live").map((r) => r.instId));
+  instrumentCache = { at: nowMs, crypto };
+  return crypto;
+}
+
+/** Crypto USDT perps up PUMP_MIN or more in 24h, biggest first: [{ sym, gain, usd }]. */
+export async function findPumps(get, nowMs, { limit = 6 } = {}) {
+  const [tickers, crypto] = await Promise.all([get("/api/v1/market/tickers"), cryptoInstruments(get, nowMs)]);
+  return (Array.isArray(tickers) ? tickers : [])
+    .filter((t) => t.instId.endsWith("-USDT") && crypto.has(t.instId) && Number(t.open24h) > 0)
+    .map((t) => ({ sym: t.instId, gain: Number(t.last) / Number(t.open24h) - 1, usd: Number(t.volCurrency24h) * Number(t.last) }))
+    .filter((t) => t.gain >= PUMP_MIN)
+    .sort((a, b) => b.gain - a.gain)
+    .slice(0, limit);
+}
+
+export function pumpText(gain) {
+  const history = gain >= 0.5
+    ? "in testing, coins up 50%+ were 12% lower on average a week later"
+    : "in testing, coins up 30%+ were 6% lower on average a week later";
+  return `Up ${(gain * 100).toFixed(0)}% in 24h: don't chase (${history})`;
+}
+
 /** One scan. Coins that fail to load are skipped; throws only if every coin fails. */
 export async function scanSetups({ symbols }, { get = createPublicClient({ pauseMs: 0 }), nowMs = Date.now() } = {}) {
   const strategy = { ...STRATEGIES.swing, ...PAPER.overrides };
@@ -88,23 +120,38 @@ export async function scanSetups({ symbols }, { get = createPublicClient({ pause
   const ok = results.filter((r) => r.ok).map((r) => r.value);
   if (!ok.length) throw new Error(`no coin could be scanned (${results.find((r) => !r.ok)?.err?.message ?? "unknown error"})`);
   const skipped = symbols.filter((s) => !ok.some((o) => o.sym === s));
+  // Pump warnings are extra information: if they fail to load, the scan still stands.
+  const pumps = await findPumps(get, nowMs).catch(() => []);
+  const pumped = new Map(pumps.map((p) => [p.sym, p.gain]));
 
   const downtrend = ok.filter((o) => o.rank === 3).length;
-  const candidates = ok
+  const setupRows = ok
     .filter((o) => o.rank < 3)
     .sort((a, b) => a.rank - b.rank || (a.rank === 1 ? a.dist - b.dist : (b.momentum ?? -1) - (a.momentum ?? -1)))
     .map((o) => ({
+      rank: o.rank,
       symbol: o.sym,
-      signal: `${o.text}${traded.has(o.sym) ? " · paper-traded" : ""}`,
+      signal: `${o.text}${pumped.has(o.sym) ? ` · up ${(pumped.get(o.sym) * 100).toFixed(0)}% in 24h, don't chase` : ""}${traded.has(o.sym) ? " · paper-traded" : ""}`,
       updatedAt: new Date(o.closedAt).toISOString(),
     }));
+  const listed = new Set(setupRows.map((r) => r.symbol));
+  const pumpRows = pumps.filter((p) => !listed.has(p.sym)).map((p) => ({
+    rank: 1.5,
+    symbol: p.sym,
+    signal: `${pumpText(p.gain)} · $${(p.usd / 1e6).toFixed(1)}M traded`,
+    updatedAt: new Date(nowMs).toISOString(),
+  }));
+  // Signals and setups first, then pump warnings, then weaker uptrends.
+  const candidates = [...setupRows, ...pumpRows]
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ rank, ...c }) => c);
 
   return {
     asOf: new Date(nowMs).toISOString(),
     criteria:
       `Big Swing rules on finished BloFin 4h candles (breakout above the ${strategy.breakout}-candle high, daily close above its EMA 50, ` +
       `ADX at least ${strategy.adxMin}, volume ${strategy.volumeMult}× average), with ${MOMENTUM_DAYS}-day momentum. ` +
-      `Signals first, then setups closest to a breakout, then weaker uptrends by momentum. ` +
+      `Signals first, then setups closest to a breakout, then coins anywhere on BloFin up ${PUMP_MIN * 100}%+ in 24h (a warning, not a trade), then weaker uptrends by momentum. ` +
       `${downtrend} of ${ok.length} coins are in a downtrend and not listed. ` +
       `The paper trader trades ${[...traded].map((s) => s.replace("-USDT", "")).join(", ")}; the rest are watch-only.` +
       (skipped.length ? ` Not scanned this time: ${skipped.join(", ")}.` : ""),

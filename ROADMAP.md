@@ -79,6 +79,12 @@ Goal: know whether the signals would actually have made money before acting on t
   Max hit the kill switch. 3-5 trades a day wasn't achievable profitably: looser versions that
   trade more all lost after costs. Paper trading on demo next to Big Swing; each bot skips a coin
   the other already holds.
+- **Today's top gainers (Nov 2026).** Over a year of BloFin's 150 most-traded crypto perps, buying a
+  coin after a big 24h rise lost money: coins up 30%+ were 6% lower a week later on average, coins
+  up 50%+ 12% lower (median -19%). Shorting them looked good without stops, but after a 50%+ pump
+  1 in 10 rose another 100%+ within 3 days, and with a stop-loss the best short version made only
+  +8% in a year (not traded). The scanner now lists pumps as "don't chase" warnings, and both bots
+  skip a coin already up 30%+ in 24h (roughly neutral in their backtests; backed by the study).
 - **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.

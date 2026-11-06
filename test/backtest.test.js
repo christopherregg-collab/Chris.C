@@ -473,3 +473,52 @@ test("a time stop closes a trade that hasn't bounced", () => {
   const r = bt(rows, { strategy: { ...MR, maxBars: 3 } });
   assert.equal(r.trades[0].reason, "time stop");
 });
+
+// --- fade the pump ------------------------------------------------------------
+
+const FADE = {
+  ...TEST_STRATEGY, signal: "fade", lookback: 5, pumpMin: 0.3, sides: "short", breakout: null, exitChannel: null,
+  stopPct: 0.25, trailAtr: 1000, entry: { type: "market" },
+};
+const pump = [...flat(30), [100, 110, 100, 110], [110, 120, 110, 120], [120, 130, 120, 130], [130, 140, 130, 140]];
+
+test("fade shorts a coin after a pump, and a fixed % take-profit closes it with a maker fill", () => {
+  const rows = [...pump, [140, 141, 139, 140], [140, 140, 120, 121], [121, 122, 100, 101], ...flat(3, 101)];
+  const r = bt(rows, { strategy: { ...FADE, targetPct: 0.2 } });
+  const t = r.trades[0];
+  assert.equal(t.side, "short");
+  assert.equal(t.reason, "target");
+  near(t.exitPrice, t.entryPrice * 0.8, 1e-9);
+  assert.ok(t.pnl > 0);
+});
+
+test("fade with confirm 'stall' waits for a close below the previous candle's low", () => {
+  const rows = [...pump, [140, 145, 139, 144], [144, 146, 135, 136], ...flat(4, 136)];
+  const r = bt(rows, { strategy: { ...FADE, confirm: "stall", lookback: 6 } });
+  assert.equal(bt(rows, { strategy: { ...FADE, lookback: 6 } }).trades[0].openTime, T0 + 33 * HOUR, "without confirm it enters as soon as the pump reaches 30%");
+  // The first short signal is the stall candle (index 35), so the entry is the next candle.
+  assert.equal(r.trades[0].openTime, T0 + 36 * HOUR);
+});
+
+test("a fixed % stop limits a squeezed short to about 1R", () => {
+  const rows = [...pump, [140, 141, 139, 140], [140, 200, 140, 190], ...flat(3, 190)];
+  const r = bt(rows, { strategy: FADE });
+  const t = r.trades[0];
+  assert.equal(t.reason, "stop");
+  near(t.exitPrice, t.entryPrice * 1.25, 1e-9);
+  near(t.r, -1, 1e-9);
+});
+
+test("cooldown stops an immediate re-entry on the same coin", () => {
+  const rows = [...pump, [140, 141, 139, 140], [140, 200, 140, 190], [190, 230, 190, 230], [230, 231, 229, 230], ...flat(3, 230)];
+  const without = bt(rows, { strategy: FADE });
+  const withCooldown = bt(rows, { strategy: { ...FADE, cooldownBars: 24 } });
+  assert.ok(without.trades.length > withCooldown.trades.length);
+  assert.equal(withCooldown.trades.length, 1);
+});
+
+test("maxRise24h skips a breakout on a coin that already pumped in the last 24 candles", () => {
+  const rows = [...flat(40), [100, 136, 100, 135], ...flat(4, 135)]; // one candle up 35%
+  assert.ok(bt(rows).trades.length >= 1, "without the rule it buys the breakout");
+  assert.equal(bt(rows, { strategy: { ...TEST_STRATEGY, maxRise24h: 0.3 } }).trades.length, 0);
+});
