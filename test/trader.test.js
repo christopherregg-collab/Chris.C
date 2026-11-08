@@ -77,7 +77,7 @@ function replayExchange(data, barMs) {
     pendingOrders: async () => orders.filter((o) => o.type === "limit").map((o) => ({ symbol: o.sym, orderId: o.id, side: o.side, price: o.price, contracts: o.contracts })),
     pendingStops: async () => stops.map((s) => ({ symbol: s.sym, stopId: s.id, triggerPrice: s.trigger })),
     setLeverage: async (sym, lev) => { calls.push(["leverage", sym, lev]); },
-    placeLimit: async (sym, side, price, contracts) => { const o = { id: String(++id), sym, side, price, contracts, type: "limit" }; orders.push(o); calls.push(["limit", sym, side, price, contracts]); return o.id; },
+    placeLimit: async (sym, side, price, contracts, opts = {}) => { const o = { id: String(++id), sym, side, price, contracts, type: "limit", reduceOnly: !!opts.reduceOnly }; orders.push(o); calls.push(["limit", sym, side, price, contracts, !!opts.reduceOnly]); return o.id; },
     placeMarket: async (sym, side, contracts, reduceOnly) => { const o = { id: String(++id), sym, side, contracts, reduceOnly, type: "market" }; orders.push(o); calls.push(["market", sym, side, contracts, reduceOnly]); return o.id; },
     cancelOrder: async (_sym, orderId) => { const i = orders.findIndex((o) => o.id === orderId); if (i > -1) orders.splice(i, 1); calls.push(["cancel", orderId]); },
     placeStop: async (sym, side, trigger) => { const s = { id: String(++id), sym, side, trigger }; stops.push(s); calls.push(["stop", sym, side, trigger]); return s.id; },
@@ -342,8 +342,8 @@ test("smoke test runs every order call and passes on a working exchange", async 
   const lines = [];
   const { failed } = await runSmokeTest(ex, "BTC-USDT", { log: (l) => lines.push(l), sleep: async () => {} });
   assert.equal(failed, 0, lines.join("\n"));
-  assert.deepEqual(ex.calls, ["leverage", "limit", "cancel", "market", "stop", "cancel stop", "stop", "close", "cancel stop"]);
-  assert.equal(lines.filter((l) => l.startsWith("PASS")).length, 9);
+  assert.deepEqual(ex.calls, ["leverage", "limit", "cancel", "market", "stop", "cancel stop", "stop", "limit", "cancel", "close", "cancel stop"]);
+  assert.equal(lines.filter((l) => l.startsWith("PASS")).length, 10);
 });
 
 test("smoke test closes its position if a step fails", async () => {
@@ -447,4 +447,63 @@ test("the dashboard shows Big Swing and Active Swing paper bots in their own slo
   assert.match(d.strategies[2].message, /\$100\.00 pot/);
   assert.deepEqual([...new Set(d.trades.items.map((t) => t.slot))].sort(), ["lower_1", "lower_2"]);
   assert.match(d.events[0].text, /Active Swing \(paper\)/);
+});
+
+// --- Big Swing Short (demo experiment) ---------------------------------------
+
+test("the short bot matches the backtester: BTC regime, short entries and take-profits", async () => {
+  // Falling synthetic market: start high and drift down so BTC spends time below its daily EMA.
+  const hourly = syntheticMarket({ hours: 300 * 24, seed: 5, symbols: ["BTC-USDT", "ETH-USDT"], startPrices: [60000, 3000] });
+  const data = Object.fromEntries(Object.entries(hourly).map(([sym, c]) =>
+    [sym, resample(c, 4 * HOUR, HOUR).filter((b) => b.complete).map(({ end, complete, ...b }) => b)]));
+  const strategy = { ...STRATEGIES.swingShort, symbols: ["ETH-USDT"], adxMin: 15, volumeMult: 1.0 };
+  const { state, ex } = await replay(strategy, data);
+  const bt = runBacktest({
+    strategy, level: LEVELS.conservative, ladder: LADDER, limits: { ...LIMITS, killSwitch: null },
+    costs: { ...COSTS, takerFee: 0, makerFee: 0, slippage: 0, defaultFundingRate: 0 },
+    specs: { "ETH-USDT": { qtyStep: 0.0001, minQty: 0.0001 } }, data, startEquity: 1000,
+  });
+  assert.ok(bt.trades.length >= 3, `backtest made ${bt.trades.length} trades`);
+  assert.ok(bt.trades.every((t) => t.side === "short"));
+  assert.ok(state.trades.length >= 3, `trader made ${state.trades.length} trades`);
+  assert.ok(state.trades.every((t) => t.side === "short"));
+  const btEntries = new Set(bt.trades.map((t) => t.openTime));
+  const matched = state.trades.filter((t) => btEntries.has(Date.parse(t.openedAt) - strategy.barMs)).length;
+  assert.ok(matched / state.trades.length >= 0.7, `only ${matched} of ${state.trades.length} entries match`);
+  // Every fill got a reduce-only take-profit order.
+  const tps = ex.calls.filter((c) => c[0] === "limit" && c[5] === true);
+  assert.ok(tps.length >= state.trades.length - 1);
+});
+
+test("without the BTC trend the short bot opens no new shorts", async () => {
+  const strategy = { ...STRATEGIES.swingShort, symbols: ["ETH-USDT"], breakout: 3, adxMin: 0, volumeMult: 0, trendFilters: [] };
+  const flat = Array.from({ length: 80 }, (_, i) => ({ time: i * 4 * HOUR, open: 100, high: 101, low: 99, close: 100, volume: 1 }));
+  const candles = [...flat, { time: 80 * 4 * HOUR, open: 100, high: 100, low: 94, close: 95, volume: 1 }];
+  const placed = [];
+  const ex = {
+    specs: async () => ({ "ETH-USDT": SPEC }), positions: async () => [], pendingOrders: async () => [], pendingStops: async () => [],
+    candles: async (sym) => { if (sym === "BTC-USDT") throw new Error("BTC candles down"); return candles; },
+    setLeverage: async () => {}, placeLimit: async (...a) => { placed.push(a); return "1"; },
+  };
+  const events = [];
+  await runOnce({ ex, strategy, level: LEVELS.conservative, ladderRules: LADDER, limits: LIMITS, pot: 60, state: initialState(60), now: 81 * 4 * HOUR + 60_000, log: (e) => events.push(e) });
+  assert.equal(placed.length, 0);
+  assert.ok(events.some((e) => e.type.startsWith("market regime unavailable")));
+});
+
+test("placeLimit sends reduceOnly for take-profit orders", async () => {
+  const { createBlofinExchange } = await import("../lib/trader/blofin-exchange.js");
+  const posts = [];
+  const ex = createBlofinExchange({ get: async () => [], post: async (path, body) => { posts.push(body); return [{ orderId: "1" }]; } }, { publicGet: async () => [] });
+  await ex.placeLimit("BTC-USDT", "buy", 100, 1, { reduceOnly: true });
+  await ex.placeLimit("BTC-USDT", "buy", 100, 1);
+  assert.equal(posts[0].reduceOnly, "true");
+  assert.equal(posts[1].reduceOnly, undefined);
+});
+
+test("the short experiment has no live mode", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const r = spawnSync(process.execPath, ["scripts/paper-trader.js", "--short", "--live"], { encoding: "utf8", env: { ...process.env, LIVE_TRADING: "on" } });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /demo-only experiment/);
 });

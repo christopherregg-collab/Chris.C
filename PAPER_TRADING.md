@@ -6,6 +6,12 @@ on the server, stop it with `bash deploy/paper-active.sh stop`; it shows as Stra
 dashboard, and `node scripts/paper-trader.js --active --status` shows its state. Each bot skips a
 coin that already has a position or order it didn't place, so they never merge positions.
 
+A third, **demo-only experiment**, **Big Swing Short**, shorts 4h breakdowns on the six majors while
+BTC's daily close is below its EMA 50, with a take-profit order at 3x the risk ($60 pot, Strategy 4
+on the dashboard). Its backtest edge faded in the recent half, so it's there to gather evidence and
+has no live mode. Start with `bash deploy/paper-short.sh`, stop with `bash deploy/paper-short.sh stop`,
+status with `node scripts/paper-trader.js --short --status`.
+
 The paper trader runs **Big Swing** (long-only, Conservative level, a $60 pot) on BloFin's demo
 account with the exact rules from the backtest. It runs every 5 minutes on the server and acts
 when a 4h candle closes. The goal is to compare real fills with the backtest before any real

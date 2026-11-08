@@ -91,7 +91,8 @@ Goal: know whether the signals would actually have made money before acting on t
   didn't produce a short side that held up in both halves of the data (best: Big Swing, BTC below
   EMA 50, take profit 3x risk, +16%, PF 1.73 then 1.07). Adding shorts to either bot lowered its
   return and raised its drawdown. Both stay long-only: in downtrends they stay flat. The engine
-  keeps the shortRegime filter and targetR take-profit for later tests.
+  keeps the shortRegime filter and targetR take-profit for later tests. The best short version
+  (Big Swing Short) runs as a demo-only paper experiment to gather evidence; it has no live mode.
 - **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.

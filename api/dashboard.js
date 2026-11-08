@@ -13,8 +13,8 @@ import { getScanner } from "../server/scanner.js";
 import { getSetupScanner } from "../server/setup-scanner.js";
 
 const defaultScanner = (nowMs) => (process.env.SCANNER_MODE === "indicators" ? getScanner(nowMs) : getSetupScanner(nowMs));
-import { ACTIVE_SLOT, paperDashboard, readPaper } from "../lib/trader/dashboard-view.js";
-import { PAPER, PAPER_ACTIVE } from "../lib/backtest/settings.js";
+import { ACTIVE_SLOT, SHORT_SLOT, paperDashboard, readPaper } from "../lib/trader/dashboard-view.js";
+import { PAPER, PAPER_ACTIVE, PAPER_SHORT } from "../lib/backtest/settings.js";
 
 const DAY = 86_400_000;
 /** Snapshots are hourly; older than this means the recorder has stopped. */
@@ -22,7 +22,7 @@ export const SNAPSHOT_MAX_AGE_MS = 70 * 60_000;
 const CACHE_MS = 10_000;
 let cache = { at: 0, body: null };
 
-export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [], dailyLossCap, scanner = defaultScanner, paper = null, paperActive = null, source = { kind: "real", label: "BloFin" } } = {}) {
+export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [], dailyLossCap, scanner = defaultScanner, paper = null, paperActive = null, paperShort = null, source = { kind: "real", label: "BloFin" } } = {}) {
   const demo = source.kind === "demo";
   const asOf = new Date(nowMs).toISOString();
   const last = snapshots[snapshots.length - 1];
@@ -47,7 +47,8 @@ export async function buildDashboard(client, { nowMs = Date.now(), snapshots = [
   // The paper trader (BloFin demo account) shows in Strategy 2, its trades are marked paper.
   const paperView = paperDashboard(paper, { pot: PAPER.pot });
   const activeView = paperDashboard(paperActive, { pot: PAPER_ACTIVE.pot, slot: ACTIVE_SLOT, label: "Active Swing (paper)", what: "a 1h breakout signal" });
-  const bots = [paperView, activeView].filter(Boolean);
+  const shortView = paperDashboard(paperShort, { pot: PAPER_SHORT.pot, slot: SHORT_SLOT, label: "Big Swing Short (demo)", what: "a breakdown while BTC is in a downtrend" });
+  const bots = [paperView, activeView, shortView].filter(Boolean);
 
   return {
     mode: "live",
@@ -98,6 +99,7 @@ export default async function handler(req, res) {
       dailyLossCap: Number(process.env.DAILY_LOSS_CAP) || undefined,
       paper: readPaper(),
       paperActive: readPaper("data/paper-active"),
+      paperShort: readPaper("data/paper-short"),
     });
     cache = { at: nowMs, body };
     return send(res, 200, body);

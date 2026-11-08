@@ -40,7 +40,13 @@ export const defaultStrategies: Record<SlotId, StrategyDisplayConfig> = {
     symbols: ["XRP", "ADA", "SOL", "DOGE", "SUI", "LINK", "AVAX", "PEPE", "XLM", "INJ", "BNB"],
     notes: "Runs every 5 minutes on the server (scripts/paper-trader.js --active). Conservative level, $100 pot. Skips a coin Big Swing is already holding.",
   },
-  lower_3: empty(),
+  lower_3: {
+    name: "Big Swing Short (demo)",
+    description: "Demo-only experiment: shorts 4h breakdowns on the six majors while BTC is below its daily EMA 50, taking profit at 3x risk.",
+    timeframe: "4h",
+    symbols: ["BTC", "ETH", "SOL", "XRP", "BNB", "DOGE"],
+    notes: "Paper only, never live (scripts/paper-trader.js --short). $60 demo pot. In testing its edge faded in the recent half, so it's here to gather evidence.",
+  },
 };
 
 export const SLOT_LABELS: Record<SlotId, string> = {
