@@ -522,3 +522,31 @@ test("maxRise24h skips a breakout on a coin that already pumped in the last 24 c
   assert.ok(bt(rows).trades.length >= 1, "without the rule it buys the breakout");
   assert.equal(bt(rows, { strategy: { ...TEST_STRATEGY, maxRise24h: 0.3 } }).trades.length, 0);
 });
+
+// --- shorts: market regime filter, R-multiple target, two-sided don't-chase ------
+
+test("shortRegime only allows shorts while the reference coin is in a downtrend", () => {
+  const down = Array.from({ length: 120 }, (_, i) => { const c = 300 - i; return [c + 1, c + 1.5, c - 0.5, c]; });
+  const data = { X: bars([...down, [180, 180, 170, 171], ...flat(3, 171)]) };
+  const refDown = { REF: bars(Array.from({ length: 125 }, (_, i) => [500 - i, 501 - i, 499 - i, 500 - i])) };
+  const refUp = { REF: bars(Array.from({ length: 125 }, (_, i) => [100 + i, 101 + i, 99 + i, 100 + i])) };
+  const strategy = { ...TEST_STRATEGY, sides: "short", shortRegime: { symbol: "REF", ms: 4 * HOUR, ema: 5 } };
+  const run = (regimeData) => runBacktest({ strategy, level: LEVEL, ladder: LADDER, limits: LIM, costs: NO_COSTS, specs: SPECS, data, regimeData, startEquity: 1000 });
+  assert.ok(run(refDown).trades.length >= 1, "shorts allowed in a falling market");
+  assert.equal(run(refUp).trades.length, 0, "no shorts in a rising market");
+  assert.throws(() => run({}), /shortRegime needs candles for REF/);
+});
+
+test("targetR takes profit at a multiple of the stop distance", () => {
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], [106, 130, 105, 129], ...flat(3, 129)];
+  const r = bt(rows, { strategy: { ...TEST_STRATEGY, targetR: 2 } });
+  const t = r.trades[0];
+  assert.equal(t.reason, "target");
+  near(t.r, 2, 0.01); // exactly 2R before the 0.02% maker fees on the two fills
+});
+
+test("maxRise24h also blocks shorting a coin that already dumped", () => {
+  const rows = [...flat(40), [100, 100, 64, 65], ...flat(4, 65)]; // one candle down 35%
+  assert.ok(bt(rows).trades.some((t) => t.side === "short"), "without the rule it shorts the breakdown");
+  assert.equal(bt(rows, { strategy: { ...TEST_STRATEGY, maxRise24h: 0.3 } }).trades.length, 0);
+});
