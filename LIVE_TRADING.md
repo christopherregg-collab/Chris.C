@@ -54,6 +54,14 @@ It asks for the trade key (first time only), runs the smoke test on the real acc
 minimum-size BTC trade, opened and closed, a few cents of fees), and only if every step passes,
 starts the live timer.
 
+## Weekly report
+
+The dashboard's report button (top right, next to the theme switch) opens the weekly bots report
+at `/api/report`: every bot, live and demo, with its trades, average result in R, win rate, worst
+drop, limit-order fill rate, problems from its log, open positions, and progress to the 30-trade
+review. It's built fresh each time you open it. Every Monday 08:00 UTC the server also saves a copy
+to `data/reports/`. In the console: `bash deploy/report.sh`.
+
 ## Watch and stop
 
 ```

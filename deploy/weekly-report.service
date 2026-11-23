@@ -1,0 +1,8 @@
+[Unit]
+Description=Weekly trading bots report (saved to data/reports/)
+
+[Service]
+Type=oneshot
+User=bot
+WorkingDirectory=/opt/trading-bot
+ExecStart=/usr/bin/env node scripts/weekly-report.js --save

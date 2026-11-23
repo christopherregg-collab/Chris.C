@@ -30,6 +30,7 @@ const TYPES = {
 const API = {
   dashboard: () => import("../api/dashboard.js"),
   candles: () => import("../api/candles.js"),
+  report: () => import("../api/report.js"),
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

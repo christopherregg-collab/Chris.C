@@ -10,6 +10,9 @@ const base = (props: SVGProps<SVGSVGElement>) => ({
 export const SearchIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
 );
+export const ReportIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /><path d="M8 17v-3M12 17v-5M16 17v-2" /></svg>
+);
 export const PulseIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M3 12h4l3-8 4 16 3-8h4" /></svg>
 );

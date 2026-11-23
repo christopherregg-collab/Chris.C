@@ -41,10 +41,12 @@ install -m 644 deploy/paper-trader.service /etc/systemd/system/paper-trader.serv
 install -m 644 deploy/paper-trader.timer /etc/systemd/system/paper-trader.timer
 install -m 644 deploy/live-trader.service /etc/systemd/system/live-trader.service
 install -m 644 deploy/live-trader.timer /etc/systemd/system/live-trader.timer
-for unit in paper-active live-active paper-short live-short; do
+for unit in paper-active live-active paper-short live-short weekly-report; do
   install -m 644 "deploy/$unit.service" "/etc/systemd/system/$unit.service"
   install -m 644 "deploy/$unit.timer" "/etc/systemd/system/$unit.timer"
 done
+systemctl daemon-reload
+systemctl enable --now weekly-report.timer >/dev/null 2>&1 || true
 systemctl daemon-reload
 systemctl restart trading-bot
 sleep 3

@@ -8,7 +8,7 @@ import { STALE_AFTER_SEC, freshness, ms, type Source } from "../lib/derive";
 import { age, ago, fmtDateTime } from "../lib/format";
 import { SLOTS, type DashboardData, type HealthStatus, type SlotId, type StrategyDisplayConfig } from "../types";
 import { StatusDot } from "./Card";
-import { BellIcon, LogoMark, LogoutIcon, MoonIcon, PulseIcon, SearchIcon, SunIcon } from "./Icons";
+import { BellIcon, LogoMark, LogoutIcon, MoonIcon, PulseIcon, ReportIcon, SearchIcon, SunIcon } from "./Icons";
 import { Modal } from "./Modal";
 
 const HEALTH: Record<HealthStatus, { label: string; tone: "ok" | "warn" | "error" }> = {
@@ -98,6 +98,12 @@ export function Header({ state, now, theme, onToggleTheme, onReload, onGoTo, str
           <BellIcon />
           {unread > 0 && <span className="icon-badge" aria-hidden="true">{unread}</span>}
         </button>
+        {adapter.kind === "api" && (
+          // The weekly bots report, served by the server behind the same login.
+          <a className="icon-btn" href="/api/report" target="_blank" rel="noopener" aria-label="Weekly bots report" title="Weekly bots report">
+            <ReportIcon />
+          </a>
+        )}
         <button type="button" className="icon-btn" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} onClick={onToggleTheme}>
           {theme === "dark" ? <SunIcon /> : <MoonIcon />}
         </button>

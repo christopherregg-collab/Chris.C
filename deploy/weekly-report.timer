@@ -1,0 +1,10 @@
+[Unit]
+Description=Save the weekly trading bots report every Monday 08:00 UTC
+
+[Timer]
+OnCalendar=Mon *-*-* 08:00:00 UTC
+Persistent=true
+Unit=weekly-report.service
+
+[Install]
+WantedBy=timers.target
