@@ -8,14 +8,14 @@
 //                                            what it would do right now
 //   node scripts/paper-trader.js --status    show saved state without trading
 //   add --active to any of these             Active Swing (PAPER_ACTIVE / LIVE_ACTIVE) instead of Big Swing
-//   add --short (demo only)                  Big Swing Short experiment (PAPER_SHORT), state in data/paper-short
+//   add --short to any of these              Big Swing Short (PAPER_SHORT / LIVE_SHORT), state in data/{paper,live}-short
 //
 // On the server systemd timers run one step every 5 minutes (deploy/paper-trader.timer,
 // deploy/paper-active.timer). State: data/paper[-active]/state.json, events: log.jsonl.
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { LADDER, LEVELS, LIMITS, LIVE, LIVE_ACTIVE, PAPER, PAPER_ACTIVE, PAPER_SHORT, STRATEGIES } from "../lib/backtest/settings.js";
+import { LADDER, LEVELS, LIMITS, LIVE, LIVE_ACTIVE, LIVE_SHORT, PAPER, PAPER_ACTIVE, PAPER_SHORT, STRATEGIES } from "../lib/backtest/settings.js";
 import { initialState, runOnce } from "../lib/trader/trader.js";
 import { createBlofinExchange, createDryRunExchange, createTradingClient, demoCredentialsFromEnv, liveCredentialsFromEnv } from "../lib/trader/blofin-exchange.js";
 
@@ -23,12 +23,8 @@ const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const live = args.has("--live");
 const active = args.has("--active"); // Active Swing instead of Big Swing
-const short = args.has("--short"); // Big Swing Short: a demo-only experiment
-if (short && live) {
-  console.error("Big Swing Short is a demo-only experiment: there is no live mode for it.");
-  process.exit(1);
-}
-const CONFIG = short ? PAPER_SHORT : live ? (active ? LIVE_ACTIVE : LIVE) : active ? PAPER_ACTIVE : PAPER;
+const short = args.has("--short"); // Big Swing Short (experimental: its backtest edge faded)
+const CONFIG = live ? (short ? LIVE_SHORT : active ? LIVE_ACTIVE : LIVE) : short ? PAPER_SHORT : active ? PAPER_ACTIVE : PAPER;
 const dir = `data/${live ? "live" : "paper"}${active ? "-active" : short ? "-short" : ""}`;
 const stateFile = `${dir}/${dryRun ? "dry-run-state.json" : "state.json"}`;
 const logFile = `${dir}/${dryRun ? "dry-run-log.jsonl" : "log.jsonl"}`;

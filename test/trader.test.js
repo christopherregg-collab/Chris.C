@@ -501,9 +501,21 @@ test("placeLimit sends reduceOnly for take-profit orders", async () => {
   assert.equal(posts[1].reduceOnly, undefined);
 });
 
-test("the short experiment has no live mode", async () => {
+test("live short trading needs LIVE_TRADING=on and its own trade keys", async () => {
   const { spawnSync } = await import("node:child_process");
-  const r = spawnSync(process.execPath, ["scripts/paper-trader.js", "--short", "--live"], { encoding: "utf8", env: { ...process.env, LIVE_TRADING: "on" } });
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /demo-only experiment/);
+  const off = spawnSync(process.execPath, ["scripts/paper-trader.js", "--short", "--live"], { encoding: "utf8", env: { ...process.env, LIVE_TRADING: "" } });
+  assert.equal(off.status, 1);
+  assert.match(off.stderr, /Live trading is off/);
+  const env = { ...process.env, LIVE_TRADING: "on" };
+  for (const k of ["BLOFIN_TRADE_API_KEY", "BLOFIN_TRADE_API_SECRET", "BLOFIN_TRADE_API_PASSPHRASE"]) delete env[k];
+  const noKeys = spawnSync(process.execPath, ["scripts/paper-trader.js", "--short", "--live"], { encoding: "utf8", env });
+  assert.equal(noKeys.status, 1);
+  assert.match(noKeys.stderr, /BLOFIN_TRADE_API_KEY/);
+});
+
+test("the live short bot keeps its own state, separate from the demo one", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const r = spawnSync(process.execPath, ["scripts/paper-trader.js", "--short", "--live", "--status"], { encoding: "utf8" });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /^LIVE Big Swing Short \/ Conservative, pot \$60/);
 });

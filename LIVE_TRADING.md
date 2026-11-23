@@ -1,5 +1,14 @@
 # Live trading (real money)
 
+Each bot goes live on its own: `bash deploy/go-live.sh short` (Big Swing Short, experimental),
+`bash deploy/go-live.sh swing` (Big Swing) or `bash deploy/go-live.sh active` (Active Swing). Stop one
+with `bash deploy/go-live.sh stop short`, or all with `bash deploy/go-live.sh stop`. Live bots share
+one real account and skip any coin another bot (or you) already holds.
+
+**Big Swing Short is experimental:** its backtest edge faded in the recent half of the data
+(profit factor 1.73, then 1.07). It runs live at the owner's request; judge it after about 30
+trades: keep it if it averages +0.2R a trade or better, retire it if it averages below 0.
+
 The live trader runs the same Big Swing rules and code as the paper trader, on your real BloFin
 account: long-only 4h breakouts on BTC, ETH, SOL, XRP, BNB and DOGE, at the Conservative level,
 sized as if the account held a **$60 pot**. Settings are in `LIVE` in `lib/backtest/settings.js`.
@@ -39,7 +48,7 @@ These come from testing, not a promise:
 
 In the Hetzner console:
 ```
-bash /opt/trading-bot/deploy/go-live.sh
+bash /opt/trading-bot/deploy/go-live.sh swing
 ```
 It asks for the trade key (first time only), runs the smoke test on the real account (one
 minimum-size BTC trade, opened and closed, a few cents of fees), and only if every step passes,
