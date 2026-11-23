@@ -3,6 +3,7 @@
 #   bash deploy/go-live.sh short         Big Swing Short (experimental)
 #   bash deploy/go-live.sh swing         Big Swing (the default if no bot is named)
 #   bash deploy/go-live.sh active        Active Swing
+#   bash deploy/go-live.sh all           all three (one smoke test, then each bot)
 #   bash deploy/go-live.sh stop short    stop one bot (open positions keep their BloFin stops)
 #   bash deploy/go-live.sh stop          stop ALL live bots and turn LIVE_TRADING off
 #
@@ -47,7 +48,7 @@ if [ "${1:-}" = "stop" ]; then
 fi
 
 BOT="${1:-swing}"
-UNIT=$(unit_for "$BOT")
+if [ "$BOT" = "all" ]; then BOTS="swing active short"; else unit_for "$BOT" >/dev/null; BOTS="$BOT"; fi
 
 if ! grep -q '^BLOFIN_TRADE_API_KEY=.' "$ENV"; then
   echo "== Real-account trading key"
@@ -73,19 +74,22 @@ if ! runuser -u bot -- /opt/node/bin/node --dns-result-order=ipv4first --env-fil
   # Leave live trading as it was for any bot already running; otherwise turn it back off.
   if [ "$WAS_LIVE" = "0" ]; then sed -i 's/^LIVE_TRADING=.*/LIVE_TRADING=off/' "$ENV"; fi
   echo
-  echo "Smoke test failed, so the $BOT bot was NOT started. Send the output above to Claude."
+  echo "Smoke test failed, so no bot was started ($BOTS). Send the output above to Claude."
   exit 1
 fi
 
-install -m 644 "deploy/$UNIT.service" "/etc/systemd/system/$UNIT.service"
-install -m 644 "deploy/$UNIT.timer" "/etc/systemd/system/$UNIT.timer"
-systemctl daemon-reload
+for B in $BOTS; do
+  UNIT=$(unit_for "$B")
+  install -m 644 "deploy/$UNIT.service" "/etc/systemd/system/$UNIT.service"
+  install -m 644 "deploy/$UNIT.timer" "/etc/systemd/system/$UNIT.timer"
+  systemctl daemon-reload
+  echo
+  echo "== Dry run of the $B bot on live prices (no orders)"
+  runuser -u bot -- /opt/node/bin/node --dns-result-order=ipv4first scripts/paper-trader.js $(flags_for "$B") --dry-run || true
+  systemctl enable --now "$UNIT.timer" >/dev/null
+  echo "== LIVE $B is ON: one step every 5 minutes, with real money."
+  echo "   Status: runuser -u bot -- node scripts/paper-trader.js $(flags_for "$B") --status"
+  echo "   Log:    journalctl -u $UNIT.service -n 30"
+done
 echo
-echo "== Dry run of the $BOT bot on live prices (no orders)"
-runuser -u bot -- /opt/node/bin/node --dns-result-order=ipv4first scripts/paper-trader.js $(flags_for "$BOT") --dry-run || true
-systemctl enable --now "$UNIT.timer" >/dev/null
-echo
-echo "== LIVE $BOT is ON: one step every 5 minutes, with real money."
-echo "Status:  runuser -u bot -- node scripts/paper-trader.js $(flags_for "$BOT") --status"
-echo "Log:     journalctl -u $UNIT.service -n 30"
-echo "Stop:    bash deploy/go-live.sh stop $BOT      (or: bash deploy/go-live.sh stop   for all)"
+echo "Stop one: bash deploy/go-live.sh stop swing|active|short    Stop all: bash deploy/go-live.sh stop"
