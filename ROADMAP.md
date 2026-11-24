@@ -93,6 +93,13 @@ Goal: know whether the signals would actually have made money before acting on t
   return and raised its drawdown. Both stay long-only: in downtrends they stay flat. The engine
   keeps the shortRegime filter and targetR take-profit for later tests. The best short version
   (Big Swing Short) runs as a demo-only paper experiment to gather evidence; it has no live mode.
+- **Stop distance and re-entry (Nov 2026).** 31-46% of losing stop-outs later moved 2R+ the right
+  way, but neither wider stops nor re-entry captured that profitably. Big Swing did better with a
+  TIGHTER stop: 1.5 ATR instead of 2 (+203% vs +79% fixed, both halves better; the walk-forward
+  chose 1.5 ATR in every quarter, +103% to +134% vs +68% to +85%). Active Swing's walk-forward
+  preferred 3 ATR (worst drop 16% instead of 20-24%, but +84-94% instead of +138-148%). Re-entry
+  added trades and drawdown without improving results (and hurt the short bot). Settings unchanged
+  pending the owner's decision; the engine keeps reentryBars for later tests.
 - **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.

@@ -550,3 +550,14 @@ test("maxRise24h also blocks shorting a coin that already dumped", () => {
   assert.ok(bt(rows).trades.some((t) => t.side === "short"), "without the rule it shorts the breakdown");
   assert.equal(bt(rows, { strategy: { ...TEST_STRATEGY, maxRise24h: 0.3 } }).trades.length, 0);
 });
+
+test("reentryBars buys back in once after a stop-out if price recovers past the entry", () => {
+  // Stop-out, then a close back above the 106 entry (106.5) that is NOT a new breakout (below 107).
+  const rows = [...flat(30), [100, 106, 100, 105], [106, 107, 105, 106], [106, 106, 103, 103.5], [103.5, 106.8, 103.4, 106.5], ...flat(3, 106.5)];
+  const strategy = { ...TEST_STRATEGY, sides: "long", stopAtr: 1, exitChannel: 50 };
+  const without = bt(rows, { strategy });
+  const withRe = bt(rows, { strategy: { ...strategy, reentryBars: 3 } });
+  assert.equal(without.trades[0].reason, "stop");
+  assert.ok(withRe.trades.length > without.trades.length, "a second trade after the stop-out");
+  assert.equal(withRe.trades[1].side, "long");
+});
