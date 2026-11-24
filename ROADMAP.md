@@ -98,8 +98,9 @@ Goal: know whether the signals would actually have made money before acting on t
   TIGHTER stop: 1.5 ATR instead of 2 (+203% vs +79% fixed, both halves better; the walk-forward
   chose 1.5 ATR in every quarter, +103% to +134% vs +68% to +85%). Active Swing's walk-forward
   preferred 3 ATR (worst drop 16% instead of 20-24%, but +84-94% instead of +138-148%). Re-entry
-  added trades and drawdown without improving results (and hurt the short bot). Settings unchanged
-  pending the owner's decision; the engine keeps reentryBars for later tests.
+  added trades and drawdown without improving results (and hurt the short bot). Decision: Big
+  Swing (live and paper) moves to a 1.5 ATR stop; Active Swing keeps 2 ATR. The engine keeps
+  reentryBars for later tests.
 - **Backtester for the scoring signals.** Replay months of historical candles through `evaluate()`, simulate entering on
   Buy and exiting on Sell, and report win rate, profit factor, max drawdown and the result of
   just holding. Include exchange fees and slippage.
